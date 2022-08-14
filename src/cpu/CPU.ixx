@@ -76,7 +76,7 @@ namespace CPU
 	void WriteCPSR(u32 value);
 
 	/* ARM instructions */
-	void BlockDataTransfer(u32 opcode);
+	template<bool> void BlockDataTransfer(u32 opcode);
 	void Branch(u32 opcode);
 	void BranchAndExchange(u32 opcode);
 	template<DataProcessingInstruction> void DataProcessing(u32 opcode);
@@ -89,7 +89,6 @@ namespace CPU
 	void SingleDataTransfer(u32 opcode);
 
 	/* THUMB instructions */
-	void ExecuteInstruction();
 	void Shift(u16 opcode);
 	void AddSubtract(u16 opcode);
 	void MoveCompareAddSubtractImm(u16 opcode);

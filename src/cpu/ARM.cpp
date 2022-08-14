@@ -10,14 +10,118 @@ import Util.Bit;
 
 namespace CPU
 {
-	void BlockDataTransfer(u32 opcode)
+	template<bool pre_or_post /* 0 = post (add offset after transfer); 1 = pre (add offset before transfer) */ >
+	void BlockDataTransfer(u32 opcode) /* LDM, STM */
 	{
+		auto reg_list = opcode & 0xFFFF;
 		auto rn = opcode >> 16 & 0xF;
-		bool l = opcode >> 20 & 1;
-		bool w = opcode >> 21 & 1;
-		bool s = opcode >> 22 & 1;
-		bool u = opcode >> 23 & 1;
-		bool p = opcode >> 24 & 1;
+		bool load_or_store = opcode >> 20 & 1; /* 0 = store to memory; 1 = load from memory */
+		bool write_back = opcode >> 21 & 1; /* 0 = no write-back; 1 = write address into base */
+		bool load_psr_and_force_user_mode = opcode >> 22 & 1; /* 0 = do not load PSR or force user mode; 1 = load PSR or force user mode */
+		bool up_or_down = opcode >> 23 & 1; /* 0 = down (subtract offset from base); 1 = up (add offset to base) */
+
+		auto addr = r[rn];
+		s32 addr_delta = up_or_down ? 4 : -4;
+
+		auto LoadWord = [&] {
+			if constexpr (pre_or_post == 1) {
+				addr += addr_delta;
+			}
+			u32 ret = Bus::Read<u32>(addr);
+			if constexpr (pre_or_post == 0) {
+				addr += addr_delta;
+			}
+			return ret;
+		};
+
+		auto StoreWord = [&](u32 word) {
+			if constexpr (pre_or_post == 1) {
+				addr += addr_delta;
+			}
+			Bus::Write<u32>(addr, word);
+			if constexpr (pre_or_post == 0) {
+				addr += addr_delta;
+			}
+		};
+
+		if (load_or_store == 0) {
+			if (load_psr_and_force_user_mode == 0) {
+				for (int i = 0; i < 16; ++i) {
+					if (reg_list & 1 << i) {
+						StoreWord(r[i]);
+					}
+				}
+			}
+			else {
+				/* Transfer user registers */
+				for (int i = 0; i < 8; ++i) {
+					if (reg_list & 1 << i) {
+						StoreWord(r[i]);
+					}
+				}
+				for (int i = 8; i < 13; ++i) {
+					if (reg_list & 1 << i) {
+						StoreWord(r8_r12_non_fiq[i - 8]);
+					}
+				}
+				if (reg_list & 1 << 13) {
+					StoreWord(r13_usr);
+				}
+				if (reg_list & 1 << 14) {
+					StoreWord(r14_usr);
+				}
+				if (reg_list & 1 << 15) {
+					StoreWord(r[15]);
+				}
+			}
+		}
+		else {
+			if (load_psr_and_force_user_mode == 0) {
+				for (int i = 0; i < 16; ++i) {
+					if (reg_list & 1 << i) {
+						r[i] = LoadWord();
+					}
+				}
+			}
+			else {
+				if (reg_list & 1 << 15) {
+					for (int i = 0; i < 16; ++i) {
+						if (reg_list & 1 << i) {
+							r[i] = LoadWord();
+						}
+					}
+					cpsr = std::bit_cast<CPSR, u32>(spsr);
+				}
+				else {
+					/* Transfer user registers */
+					for (int i = 0; i < 8; ++i) {
+						if (reg_list & 1 << i) {
+							r[i] = LoadWord();
+						}
+					}
+					for (int i = 8; i < 13; ++i) {
+						if (reg_list & 1 << i) {
+							r8_r12_non_fiq[i - 8] = LoadWord();
+						}
+					}
+					if (reg_list & 1 << 13) {
+						r13_usr = LoadWord();
+					}
+					if (reg_list & 1 << 14) {
+						r14_usr = LoadWord();
+					}
+					if (reg_list & 1 << 15) {
+						r[15] = LoadWord();
+					}
+				}
+			}
+		}
+
+		if (write_back) {
+			r[rn] = addr;
+		}
+
+		// TODO 4.11.6
 	}
 
 
@@ -147,7 +251,9 @@ namespace CPU
 			switch (opcode >> 24 & 7) {
 			case 0b000:
 			case 0b001:
-				BlockDataTransfer(opcode);
+				opcode & 1 << 24
+					? BlockDataTransfer<1>(opcode)
+					: BlockDataTransfer<0>(opcode);
 				break;
 
 			case 0b010:
@@ -439,18 +545,18 @@ namespace CPU
 		auto rd = opcode >> 12 & 0xF;
 		auto rn = opcode >> 16 & 0xF;
 		bool b = opcode >> 22 & 1;
-		auto address = r[rn];
+		auto addr = r[rn];
 		if (b) {
-			auto loaded = Bus::Read<s8>(address);
-			Bus::Write<s8>(address, r[rm]);
+			auto loaded = Bus::Read<s8>(addr);
+			Bus::Write<s8>(addr, r[rm]);
 			r[rd] = loaded;
 		}
 		else {
-			auto loaded = Bus::Read<s32>(address);
-			Bus::Write<s32>(address, r[rm]);
+			auto loaded = Bus::Read<s32>(addr);
+			Bus::Write<s32>(addr, r[rm]);
 			r[rd] = loaded;
 		}
-		s32 loaded = b ? Bus::Read<s8>(address) : Bus::Read<s32>(address);
+		s32 loaded = b ? Bus::Read<s8>(addr) : Bus::Read<s32>(addr);
 	}
 
 
@@ -471,18 +577,12 @@ namespace CPU
 			return u ? s32(offset) : -s32(offset);
 		}();
 
-		auto address = base + p * offset;
+		auto addr = base + p * offset;
 		if (load_or_store) {
-			r[rd] = byte_or_word ? Bus::Read<s8>(address) : Bus::Read<s32>(address);
+			r[rd] = byte_or_word ? Bus::Read<s8>(addr) : Bus::Read<s32>(addr);
 		}
 		else {
-			auto value = r[rd];
-			/* When R15 is the source register (Rd) of a register store (STR) instruction, the stored
-			value will be address of the instruction plus 12. */
-			if (rd == 15) {
-				value += 8; /* 4 has already been incremented after the instruction was fetched */
-			}
-			byte_or_word ? Bus::Write<s8>(address, value) : Bus::Write<s32>(address, value);
+			byte_or_word ? Bus::Write<s8>(addr, r[rd]) : Bus::Write<s32>(addr, r[rd]);
 		}
 
 		r[rn] = base + writeback * offset;
