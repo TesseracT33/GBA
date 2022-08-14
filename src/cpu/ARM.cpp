@@ -23,7 +23,7 @@ namespace CPU
 		auto addr = r[rn];
 		s32 addr_delta = up_or_down ? 4 : -4;
 
-		auto LoadWord = [&] {
+		auto LoadReg = [&] {
 			if constexpr (pre_or_post == 1) {
 				addr += addr_delta;
 			}
@@ -34,7 +34,7 @@ namespace CPU
 			return ret;
 		};
 
-		auto StoreWord = [&](u32 word) {
+		auto StoreReg = [&](u32 word) {
 			if constexpr (pre_or_post == 1) {
 				addr += addr_delta;
 			}
@@ -48,7 +48,7 @@ namespace CPU
 			if (load_psr_and_force_user_mode == 0) {
 				for (int i = 0; i < 16; ++i) {
 					if (reg_list & 1 << i) {
-						StoreWord(r[i]);
+						StoreReg(r[i]);
 					}
 				}
 			}
@@ -56,22 +56,22 @@ namespace CPU
 				/* Transfer user registers */
 				for (int i = 0; i < 8; ++i) {
 					if (reg_list & 1 << i) {
-						StoreWord(r[i]);
+						StoreReg(r[i]);
 					}
 				}
 				for (int i = 8; i < 13; ++i) {
 					if (reg_list & 1 << i) {
-						StoreWord(r8_r12_non_fiq[i - 8]);
+						StoreReg(r8_r12_non_fiq[i - 8]);
 					}
 				}
 				if (reg_list & 1 << 13) {
-					StoreWord(r13_usr);
+					StoreReg(r13_usr);
 				}
 				if (reg_list & 1 << 14) {
-					StoreWord(r14_usr);
+					StoreReg(r14_usr);
 				}
 				if (reg_list & 1 << 15) {
-					StoreWord(r[15]);
+					StoreReg(r[15]);
 				}
 			}
 		}
@@ -79,7 +79,7 @@ namespace CPU
 			if (load_psr_and_force_user_mode == 0) {
 				for (int i = 0; i < 16; ++i) {
 					if (reg_list & 1 << i) {
-						r[i] = LoadWord();
+						r[i] = LoadReg();
 					}
 				}
 			}
@@ -87,7 +87,7 @@ namespace CPU
 				if (reg_list & 1 << 15) {
 					for (int i = 0; i < 16; ++i) {
 						if (reg_list & 1 << i) {
-							r[i] = LoadWord();
+							r[i] = LoadReg();
 						}
 					}
 					cpsr = std::bit_cast<CPSR, u32>(spsr);
@@ -96,22 +96,22 @@ namespace CPU
 					/* Transfer user registers */
 					for (int i = 0; i < 8; ++i) {
 						if (reg_list & 1 << i) {
-							r[i] = LoadWord();
+							r[i] = LoadReg();
 						}
 					}
 					for (int i = 8; i < 13; ++i) {
 						if (reg_list & 1 << i) {
-							r8_r12_non_fiq[i - 8] = LoadWord();
+							r8_r12_non_fiq[i - 8] = LoadReg();
 						}
 					}
 					if (reg_list & 1 << 13) {
-						r13_usr = LoadWord();
+						r13_usr = LoadReg();
 					}
 					if (reg_list & 1 << 14) {
-						r14_usr = LoadWord();
+						r14_usr = LoadReg();
 					}
 					if (reg_list & 1 << 15) {
-						r[15] = LoadWord();
+						r[15] = LoadReg();
 					}
 				}
 			}
@@ -410,18 +410,64 @@ namespace CPU
 
 
 	template<OffsetType offset_type>
-	void HalfwordDataTransfer(u32 opcode)
+	void HalfwordDataTransfer(u32 opcode) /* LDRH, STRH, LDRSB, LDRSH */
 	{
-		auto rm = opcode & 0xF;
-		auto immediate_offset = opcode >> 4 & 0xF0 | opcode & 0xF;
 		auto sh = opcode >> 5 & 3;
 		auto rd = opcode >> 12 & 0xF;
 		auto rn = opcode >> 16 & 0xF;
-		bool load_or_store = opcode >> 20 & 1;
-		bool writeback = opcode >> 21 & 1;
-		bool u = opcode >> 23 & 1;
-		bool p = opcode >> 24 & 1;
+		bool l = opcode >> 20 & 1; /* 0 = store to memory; 1 = load from memory */
+		bool w = opcode >> 21 & 1; /* 0 = no write-back; 1 = write address into base */
+		bool u = opcode >> 23 & 1; /* 0 = down (subtract offset from base); 1 = up (add offset to base) */
+		bool p = opcode >> 24 & 1; /* 0 = add/subtract offset after transfer; 0 = add/subtract offset before transfer */
 
+		s32 offset = [&] {
+			if constexpr (offset_type == OffsetType::Register) {
+				auto rm = opcode & 0xF;
+				return r[rm];
+			}
+			else { /* immediate */
+				return opcode >> 4 & 0xF0 | opcode & 0xF;
+			}
+		}();
+		if (u == 0) {
+			offset = -offset;
+		}
+		auto addr = r[rn] + p * offset;
+		switch (sh) {
+		case 0b01: /* unsigned halfword */
+			if (l) {
+				r[rd] = Bus::Read<u16>(addr);
+			}
+			else {
+				Bus::Write<u16>(addr, u16(r[rd]));
+			}
+			break;
+
+		case 0b10: /* signed byte */
+			if (l) {
+				r[rd] = Bus::Read<s8>(addr);
+			}
+			else {
+				Bus::Write<s8>(addr, s8(r[rd]));
+			}
+			break;
+
+		case 0b11: /* signed halfword */
+			if (l) {
+				r[rd] = Bus::Read<s16>(addr);
+			}
+			else {
+				Bus::Write<s16>(addr, s16(r[rd]));
+			}
+			break;
+
+		default:
+			std::unreachable();
+		}
+		if (w) {
+			addr += !p * offset;
+			r[rn] = addr;
+		}
 	}
 
 
@@ -539,52 +585,51 @@ namespace CPU
 	}
 
 
-	void SingleDataSwap(u32 opcode)
+	void SingleDataSwap(u32 opcode) /* SWP */
 	{
 		auto rm = opcode & 0xF;
 		auto rd = opcode >> 12 & 0xF;
 		auto rn = opcode >> 16 & 0xF;
-		bool b = opcode >> 22 & 1;
+		bool byte_or_word = opcode >> 22 & 1; /* 0 = word; 1 = byte */
 		auto addr = r[rn];
-		if (b) {
-			auto loaded = Bus::Read<s8>(addr);
-			Bus::Write<s8>(addr, r[rm]);
-			r[rd] = loaded;
+		if (byte_or_word == 0) {
+			auto mem = Bus::Read<u32>(addr);
+			Bus::Write<u32>(addr, r[rm]);
+			r[rd] = mem;
 		}
 		else {
-			auto loaded = Bus::Read<s32>(addr);
-			Bus::Write<s32>(addr, r[rm]);
-			r[rd] = loaded;
+			auto mem = Bus::Read<u8>(addr);
+			Bus::Write<u8>(addr, u8(r[rm]));
+			r[rd] = mem;
 		}
-		s32 loaded = b ? Bus::Read<s8>(addr) : Bus::Read<s32>(addr);
 	}
 
 
-	void SingleDataTransfer(u32 opcode)
+	void SingleDataTransfer(u32 opcode) /* LDR, STR */
 	{
 		auto rd = opcode >> 12 & 0xF;
 		auto rn = opcode >> 16 & 0xF;
 		bool load_or_store = opcode >> 20 & 1; /* 0 = store to memory; 1 = load from memory */
 		bool writeback = opcode >> 21 & 1; /* 0 = no write-back; 1 = write address into base */
 		bool byte_or_word = opcode >> 22 & 1; /* 0 = transfer word quanitity; 1 = transfer byte quantity */
-		bool u = opcode >> 23 & 1; /* 0 = subtract offset from base; 1 = add offset to base */
+		bool up_or_down = opcode >> 23 & 1; /* 0 = subtract offset from base; 1 = add offset to base */
 		bool p = opcode >> 24 & 1; /* 0 = add offset after transfer; 1 = add offset before transfer */
-		bool i = opcode >> 25 & 1; /* 0 = offset is an immediate value; 1 = offset is a register */
-		auto base = r[rn];
+		bool reg_or_imm = opcode >> 25 & 1; /* 0 = offset is an immediate value; 1 = offset is a register */
 
 		s32 offset = [&] {
-			auto offset = i ? GetSecondOperand(opcode) : opcode & 0xFFF;
-			return u ? s32(offset) : -s32(offset);
+			auto offset = reg_or_imm ? GetSecondOperand(opcode) : opcode & 0xFFF;
+			return up_or_down ? s32(offset) : -s32(offset);
 		}();
-
-		auto addr = base + p * offset;
+		auto addr = r[rn] + p * offset;
 		if (load_or_store) {
-			r[rd] = byte_or_word ? Bus::Read<s8>(addr) : Bus::Read<s32>(addr);
+			r[rd] = byte_or_word ? Bus::Read<u8>(addr) : Bus::Read<u32>(addr);
 		}
 		else {
-			byte_or_word ? Bus::Write<s8>(addr, r[rd]) : Bus::Write<s32>(addr, r[rd]);
+			byte_or_word ? Bus::Write<u8>(addr, r[rd]) : Bus::Write<u32>(addr, r[rd]);
 		}
-
-		r[rn] = base + writeback * offset;
+		if (writeback) {
+			addr += !p * offset;
+			r[rn] = addr;
+		}
 	}
 }
