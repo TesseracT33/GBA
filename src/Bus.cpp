@@ -3,7 +3,7 @@ module Bus;
 namespace Bus
 {
 	template<std::integral Int>
-	Int Read(s32 addr)
+	Int Read(u32 addr)
 	{
 		static_assert(sizeof(Int) == 1 || sizeof(Int) == 2 || sizeof(Int) == 4);
 		/* A byte load expects the data on data bus inputs 7 through 0 if the supplied
@@ -25,21 +25,11 @@ namespace Bus
 		if constexpr (sizeof(Int) == 4) {
 
 		}
-
-		auto page = addr >> 12 & 0xFFFF;
-		u8* mem_ptr = page_table_read[page];
-		if (mem_ptr != nullptr) {
-			Int ret;
-			std::memcpy(&ret, mem_ptr + (addr & 0xFFF), sizeof(Int));
-			return ret;
-		}
-		else {
-			return 0;
-		}
+		return 0;
 	}
 
 	template<std::integral Int>
-	void Write(s32 addr, Int data)
+	void Write(u32 addr, Int data)
 	{
 		static_assert(sizeof(Int) == 1 || sizeof(Int) == 2 || sizeof(Int) == 4);
 		/* A byte store repeats the bottom 8 bits of the source register four times across
@@ -64,14 +54,19 @@ namespace Bus
 		if constexpr (sizeof(Int) == 4) {
 			addr &= ~3;
 		}
-
-		auto page = addr >> 12 & 0xFFFF;
-		u8* mem_ptr = page_table_write[page];
-		if (mem_ptr != nullptr) {
-			std::memcpy(mem_ptr + (addr & 0xFFF) , &data, sizeof(Int));
-		}
-		else {
-
-		}
 	}
+
+
+	template s8 Read<s8>(u32);
+	template u8 Read<u8>(u32);
+	template s16 Read<s16>(u32);
+	template u16 Read<u16>(u32);
+	template s32 Read<s32>(u32);
+	template u32 Read<u32>(u32);
+	template void Write<s8>(u32, s8);
+	template void Write<u8>(u32, u8);
+	template void Write<s16>(u32, s16);
+	template void Write<u16>(u32, u16);
+	template void Write<s32>(u32, s32);
+	template void Write<u32>(u32, u32);
 }

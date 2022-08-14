@@ -50,44 +50,38 @@ namespace CPU
 
 		static constexpr bool is_arithmetic_instr = instr == ADC || instr == ADD || instr == CMN ||
 			instr == CMP || instr == RSB || instr == RSC || instr == SBC || instr == SUB;
-		static constexpr bool is_logical_instr = !is_arithmetic_instr;
 
 		auto rd = opcode >> 12 & 0xF;
 		auto rn = opcode >> 16 & 0xF;
 		bool set_conds = opcode >> 20 & 1;
 		bool immediate_operand = opcode >> 21 & 1;
 
-		bool carry;
-
-		s32 oper1 = r[rn];
-
-		s32 oper2;
-		if (immediate_operand) {
-			u32 immediate = opcode & 0xFF;
-			auto shift_amount = opcode >> 7 & 0x1E; /* == 2 * (opcode >> 8 & 0xF) */
-			oper2 = std::rotr(immediate, shift_amount);
-			if constexpr (is_logical_instr) {
-				carry = immediate >> (shift_amount - 1) & 1;
+		u32 oper1 = r[rn];
+		u32 oper2 = [&] {
+			if (immediate_operand) {
+				u32 immediate = opcode & 0xFF;
+				auto shift_amount = opcode >> 7 & 0x1E; /* == 2 * (opcode >> 8 & 0xF) */
+				cpsr.carry = immediate >> ((shift_amount - 1) & 0x1F) & 1;
+				return std::rotr(immediate, shift_amount);
 			}
-		}
-		else {
-			SecondOperand result = GetSecondOperand(opcode);
-			oper2 = result.operand;
-			if constexpr (is_logical_instr) {
-				carry = result.carry;
+			else {
+				return GetSecondOperand(opcode);
 			}
-		}
+		}();
 
-		s32 result = [&] {
+		/* TODO: right now, the carry can be modified through a call to the "GetSecondOperand" function,
+			even if the "set condition codes" flag is clear. Is this correct? */
+		bool carry{};
+		u32 result = [&] {
 			if constexpr (instr == ADC) {
-				s64 result = oper1 + oper2 + cpsr.carry;
+				s64 result = s64(oper1) + s64(oper2) + s64(cpsr.carry);
 				carry = result > std::numeric_limits<s32>::max();
-				return static_cast<s32>(result);
+				return u32(result);
 			}
 			if constexpr (instr == ADD || instr == CMN) {
-				s64 result = oper1 + oper2;
+				s64 result = s64(oper1) + s64(oper2);
 				carry = result > std::numeric_limits<s32>::max();
-				return static_cast<s32>(result);
+				return u32(result);
 			}
 			if constexpr (instr == AND || instr == TST) {
 				return oper1 & oper2;
@@ -116,12 +110,12 @@ namespace CPU
 				return oper2 - oper1;
 			}
 			if constexpr (instr == RSC) {
-				s32 result = oper2 - oper1 + cpsr.carry - 1;
+				auto result = oper2 - oper1 + cpsr.carry - 1;
 				carry = oper1 + 1 - cpsr.carry > oper2;
 				return result;
 			}
 			if constexpr (instr == SBC) {
-				s32 result = oper1 - oper2 + cpsr.carry - 1;
+				auto result = oper1 - oper2 + cpsr.carry - 1;
 				carry = oper2 + 1 - cpsr.carry > oper1;
 				return result;
 			}
@@ -133,7 +127,7 @@ namespace CPU
 
 		if (set_conds) {
 			if (rd == 15) {
-				cspr = *current_spsr;
+				cpsr = std::bit_cast<CPSR, u32>(spsr);
 			}
 			else {
 				cpsr.zero = result == 0;
@@ -163,7 +157,7 @@ namespace CPU
 
 			case 0b100:
 			case 0b101:
-				CoprocessorDataTransfer(opcode);
+				SignalException<Exception::UndefinedInstruction>();
 				break;
 
 			case 0b110:
@@ -195,10 +189,10 @@ namespace CPU
 					MultiplyLong(opcode);
 				}
 				else if ((opcode & 0xF400F90) == 0x90) {
-					HalfwordDataTransferRegisterOffset(opcode);
+					//HalfwordDataTransferRegisterOffset(opcode);
 				}
 				else if ((opcode & 0xF400090) == 0x400090) {
-					HalfwordDataTransferImmediateOffset(opcode);
+					//HalfwordDataTransferImmediateOffset(opcode);
 				}
 				else {
 					using enum DataProcessingInstruction;
@@ -261,7 +255,7 @@ namespace CPU
 	}
 
 
-	SecondOperand GetSecondOperand(u32 opcode)
+	u32 GetSecondOperand(u32 opcode)
 	{
 		auto rm = opcode & 0xF;
 		auto shift_type = opcode >> 5 & 3;
@@ -275,55 +269,37 @@ namespace CPU
 			}
 		}();
 
-		u32 result;
-		bool carry;
+		if (shift_amount == 0) {
+			if (shift_type == 0b11) { /* Special function: rotate right extended */
+				u32 result = u32(r[rm]) >> 1 | cpsr.carry << 31;
+				cpsr.carry = r[rm] & 1;
+				return result;
+			}
+			else {
+				return r[rm];
+			}
+		}
+
 		switch (shift_type) {
 		case 0b00: /* logical left */
-			if (shift_amount == 0) {
-				result = r[rm];
-				carry = cpsr.carry;
-			}
-			else {
-				s64 s64_result = s64(r[rm]) << shift_amount;
-				carry = s64_result & 0x1'0000'0000;
-				result = s32(s64_result);
-			}
-			break;
+			cpsr.carry = GetBit(r[rm], 32 - shift_amount);
+			return r[rm] << shift_amount;
 
 		case 0b01: /* logical right */
-			if (shift_amount == 0) {
-				result = r[rm];
-				carry = cpsr.carry;
-			}
-			else {
-				result = u32(r[rm]) >> shift_amount;
-				carry = u32(r[rm]) >> (shift_amount - 1) & 1;
-			}
-			break;
+			cpsr.carry = 0;
+			return u32(r[rm]) >> shift_amount;
 
 		case 0b10: /* arithmetic right */
-			if (shift_amount == 0) {
-				result = r[rm];
-				carry = cpsr.carry;
-			}
-			else {
-				result = s32(r[rm]) >> shift_amount;
-				carry = s32(r[rm]) >> (shift_amount - 1) & 1;
-			}
-			break;
+			cpsr.carry = GetBit(r[rm], 31);
+			return s32(r[rm]) >> shift_amount;
 
 		case 0b11: /* rotate right */
-			if (shift_amount == 0) { /* Special function: rotate right extended */
-				result = u32(r[rm]) >> 1 | cpsr.carry << 31;
-				carry = r[rm] & 1;
-			}
-			else {
-				result = std::rotr(r[rm], shift_amount);
-				carry = r[rm] >> ((shift_amount - 1) & 0x1F) & 1;
-			}
-			break;
+			cpsr.carry = r[rm] >> ((shift_amount - 1) & 0x1F) & 1;
+			return std::rotr(r[rm], shift_amount);
+
+		default:
+			std::unreachable();
 		}
-		return { .operand = result, .carry = carry };
 	}
 
 
@@ -490,9 +466,9 @@ namespace CPU
 		bool i = opcode >> 25 & 1; /* 0 = offset is an immediate value; 1 = offset is a register */
 		auto base = r[rn];
 
-		auto offset = [&] {
+		s32 offset = [&] {
 			auto offset = i ? GetSecondOperand(opcode) : opcode & 0xFFF;
-			return u ? offset : -offset;
+			return u ? s32(offset) : -s32(offset);
 		}();
 
 		auto address = base + p * offset;

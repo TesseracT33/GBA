@@ -118,6 +118,14 @@ namespace CPU
 	constexpr u32 cpsr_mode_bits_undefined = 27;
 	constexpr u32 cpsr_mode_bits_system = 31;
 
+	constexpr u32 exception_vector_reset = 0;
+	constexpr u32 exception_vector_undefined_instr = 4;
+	constexpr u32 exception_vector_software_int = 8;
+	constexpr u32 exception_vector_prefetch_abort = 0xC;
+	constexpr u32 exception_vector_data_abort = 0x10;
+	constexpr u32 exception_vector_irq = 0x18;
+	constexpr u32 exception_vector_fiq = 0x1C;
+
 	constexpr std::array cond_strings = {
 		"EQ", "NE", "CS", "CC", "MI", "PL", "VS", "VC", "HI", "LS", "GE", "LT", "GT", "LE", "AL", "INVALID"
 	};
@@ -140,26 +148,22 @@ namespace CPU
 		u32 carry : 1;
 		u32 zero : 1;
 		u32 negative : 1;
-	} cpsr; // TODO: you are setting negative flags etc as if they are bools
+	} cpsr;
 	
-	std::array<u32, 7> r_user; /* R8-R14 */
-	std::array<u32, 7> r_fiq; /* R8-R14 */
+	std::array<u32, 5> r8_r12_non_fiq; /* R8-R12 */
+	std::array<u32, 5> r8_r12_fiq; /* R8-R12 */
+	u32 r13_usr, r14_usr; /* also system */
+	u32 r13_fiq, r14_fiq;
 	u32 r13_svc, r14_svc;
 	u32 r13_abt, r14_abt;
 	u32 r13_irq, r14_irq;
 	u32 r13_und, r14_und;
 	u32 spsr_fiq, spsr_svc, spsr_abt, spsr_irq, spsr_und;
 	u32 spsr;
-	std::array<u32, 16> r;
+	std::array<u32, 16> r; /* currently active registers */
 
 	Exception occurred_exception;
 	uint occurred_exception_priority;
 
-	struct SecondOperand
-	{
-		u32 operand;
-		bool carry;
-	};
-
-	SecondOperand GetSecondOperand(u32 opcode);
+	u32 GetSecondOperand(u32 opcode);
 }

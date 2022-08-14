@@ -12,13 +12,13 @@ namespace Bus
 	export
 	{
 		template<std::integral Int>
-		Int Read(s32 addr);
+		Int Read(u32 addr);
 
 		template<std::integral Int>
-		void Write(s32 addr, Int data);
+		void Write(u32 addr, Int data);
 	}
 
-	enum Addr : s32 {
+	enum Addr : u32 {
 		DISPCNT = 0x0,
 		DISPSTAT = 0x4,
 		VCOUNT = 0x6,
@@ -57,7 +57,4 @@ namespace Bus
 		BLDALPHA = 0x52,
 		BLDY = 0x54
 	};
-
-	std::array<u8, 0x10000> page_table_read;
-	std::array<u8, 0x10000> page_table_write;
 }

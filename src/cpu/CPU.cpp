@@ -72,9 +72,11 @@ namespace CPU
 
 	void Initialize()
 	{
-		r_user.fill(0);
-		r_fiq.fill(0);
+		r8_r12_non_fiq.fill(0);
+		r8_r12_fiq.fill(0);
 		r.fill(0);
+		r13_usr = r14_usr = 0;
+		r13_fiq = r14_fiq = 0;
 		r13_svc = r14_svc = 0;
 		r13_abt = r14_abt = 0;
 		r13_irq = r14_irq = 0;
@@ -116,60 +118,102 @@ namespace CPU
 	template<Mode mode>
 	void SetMode()
 	{
+		/* Store banked registers */
+		switch (cpsr.mode) {
+		case cpsr_mode_bits_system:
+		case cpsr_mode_bits_user:
+			std::copy(r.begin() + 8, r.end() - 3, r8_r12_non_fiq.begin());
+			r13_usr = r[13];
+			r14_usr = r[14];
+			break;
+
+		case cpsr_mode_bits_irq:
+			std::copy(r.begin() + 8, r.end() - 3, r8_r12_non_fiq.begin());
+			r13_irq = r[13];
+			r14_irq = r[14];
+			spsr_irq = spsr;
+			break;
+
+		case cpsr_mode_bits_supervisor:
+			std::copy(r.begin() + 8, r.end() - 3, r8_r12_non_fiq.begin());
+			r13_svc = r[13];
+			r14_svc = r[14];
+			spsr_svc = spsr;
+			break;
+
+		case cpsr_mode_bits_abort:
+			std::copy(r.begin() + 8, r.end() - 3, r8_r12_non_fiq.begin());
+			r13_abt = r[13];
+			r14_abt = r[14];
+			spsr_abt = spsr;
+			break;
+
+		case cpsr_mode_bits_undefined:
+			std::copy(r.begin() + 8, r.end() - 3, r8_r12_non_fiq.begin());
+			r13_und = r[13];
+			r14_und = r[14];
+			spsr_und = spsr;
+			break;
+
+		case cpsr_mode_bits_fiq:
+			std::copy(r.begin() + 8, r.end() - 3, r8_r12_fiq.begin());
+			r13_fiq = r[13];
+			r14_fiq = r[14];
+			spsr_fiq = spsr;
+			break;
+
+		default:
+			assert(false);
+			break;
+		}
+
+		/* Load banked registers */
 		if constexpr (mode == Mode::System) {
 			cpsr.mode = cpsr_mode_bits_system;
-			for (int i = 8; i < 15; ++i) {
-				r[i] = &r_user[i];
-			}
+			std::copy(r8_r12_non_fiq.begin(), r8_r12_non_fiq.end(), r.begin() + 8);
+			r[13] = r13_usr;
+			r[14] = r14_usr;
 		}
 		if constexpr (mode == Mode::User) {
 			cpsr.mode = cpsr_mode_bits_user;
-			for (int i = 8; i < 15; ++i) {
-				r[i] = &r_user[i];
-			}
-		}
-		if constexpr (mode == Mode::Fiq) {
-			cpsr.mode = cpsr_mode_bits_fiq;
-			spsr = &spsr_fiq;
-			for (int i = 8; i < 15; ++i) {
-				r[i] = &r_fiq[i];
-			}
+			std::copy(r8_r12_non_fiq.begin(), r8_r12_non_fiq.end(), r.begin() + 8);
+			r[13] = r13_usr;
+			r[14] = r14_usr;
 		}
 		if constexpr (mode == Mode::Irq) {
 			cpsr.mode = cpsr_mode_bits_irq;
-			spsr = &spsr_irq;
-			for (int i = 8; i < 13; ++i) {
-				r[i] = &r_user[i];
-			}
-			r[13] = &r13_irq;
-			r[14] = &r14_irq;
+			spsr = spsr_irq;
+			std::copy(r8_r12_non_fiq.begin(), r8_r12_non_fiq.end(), r.begin() + 8);
+			r[13] = r13_irq;
+			r[14] = r14_irq;
 		}
 		if constexpr (mode == Mode::Supervisor) {
 			cpsr.mode = cpsr_mode_bits_supervisor;
-			spsr = &spsr_svc;
-			for (int i = 8; i < 13; ++i) {
-				r[i] = &r_user[i];
-			}
-			r[13] = &r13_svc;
-			r[14] = &r14_svc;
+			spsr = spsr_svc;
+			std::copy(r8_r12_non_fiq.begin(), r8_r12_non_fiq.end(), r.begin() + 8);
+			r[13] = r13_svc;
+			r[14] = r14_svc;
 		}
 		if constexpr (mode == Mode::Abort) {
 			cpsr.mode = cpsr_mode_bits_abort;
-			spsr = &spsr_abt;
-			for (int i = 8; i < 13; ++i) {
-				r[i] = &r_user[i];
-			}
-			r[13] = &r13_abt;
-			r[14] = &r14_abt;
+			spsr = spsr_abt;
+			std::copy(r8_r12_non_fiq.begin(), r8_r12_non_fiq.end(), r.begin() + 8);
+			r[13] = r13_abt;
+			r[14] = r14_abt;
 		}
 		if constexpr (mode == Mode::Undefined) {
 			cpsr.mode = cpsr_mode_bits_undefined;
-			spsr = &spsr_und;
-			for (int i = 8; i < 13; ++i) {
-				r[i] = &r_user[i];
-			}
-			r[13] = &r13_und;
-			r[14] = &r14_und;
+			spsr = spsr_und;
+			std::copy(r8_r12_non_fiq.begin(), r8_r12_non_fiq.end(), r.begin() + 8);
+			r[13] = r13_und;
+			r[14] = r14_und;
+		}
+		if constexpr (mode == Mode::Fiq) {
+			cpsr.mode = cpsr_mode_bits_fiq;
+			spsr = spsr_fiq;
+			std::copy(r8_r12_fiq.begin(), r8_r12_fiq.end(), r.begin() + 8);
+			r[13] = r13_fiq;
+			r[14] = r14_fiq;
 		}
 	}
 
@@ -185,14 +229,14 @@ namespace CPU
 	void StepPipeline()
 	{
 		if (pipeline.step >= 2) {
-			auto executing_opcode = pipeline.opcode[opcode_index];
+			auto executing_opcode = pipeline.opcode[pipeline.opcode_index];
 			DecodeExecute(executing_opcode);
-			pipeline.opcode[opcode_index] = Fetch();
-			opcode_index ^= 1;
+			pipeline.opcode[pipeline.opcode_index] = Fetch();
+			pipeline.opcode_index ^= 1;
 		}
 		else {
-			pipeline.opcode[opcode_index] = Fetch();
-			opcode_index ^= 1;
+			pipeline.opcode[pipeline.opcode_index] = Fetch();
+			pipeline.opcode_index ^= 1;
 			pipeline.step++;
 		}
 	}
@@ -223,6 +267,7 @@ namespace CPU
 			case cpsr_mode_bits_abort     : SetMode<Mode::Abort>(); break;
 			case cpsr_mode_bits_undefined : SetMode<Mode::Undefined>(); break;
 			case cpsr_mode_bits_system    : SetMode<Mode::System>(); break;
+			default: assert(false); break;
 			}
 			execution_state = cpsr.state == 0
 				? ExecutionState::ARM

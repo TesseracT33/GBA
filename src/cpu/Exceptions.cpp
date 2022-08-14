@@ -22,7 +22,7 @@ namespace CPU
 	void HandleDataAbortException()
 	{
 		r14_abt = pc;
-		pc = 0x10;
+		pc = exception_vector_data_abort;
 		spsr_abt = std::bit_cast<u32, CPSR>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -32,8 +32,8 @@ namespace CPU
 
 	void HandleFiqException()
 	{
-		r_fiq[6] = pc;
-		pc = 0x1C;
+		r14_fiq = pc;
+		pc = exception_vector_fiq;
 		spsr_fiq = std::bit_cast<u32, CPSR>(cpsr);
 		cpsr.irq_disable = cpsr.fiq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -44,7 +44,7 @@ namespace CPU
 	void HandleIrqException()
 	{
 		r14_irq = pc;
-		pc = 0x18;
+		pc = exception_vector_irq;
 		spsr_irq = std::bit_cast<u32, CPSR>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -55,7 +55,7 @@ namespace CPU
 	void HandlePrefetchAbortException()
 	{
 		r14_abt = pc;
-		pc = 0xC;
+		pc = exception_vector_prefetch_abort;
 		spsr_abt = std::bit_cast<u32, CPSR>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -66,7 +66,7 @@ namespace CPU
 	void HandleResetException()
 	{
 		r14_svc = pc;
-		pc = 0;
+		pc = exception_vector_reset;
 		spsr_svc = std::bit_cast<u32, CPSR>(cpsr);
 		cpsr.irq_disable = cpsr.fiq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -77,7 +77,7 @@ namespace CPU
 	void HandleSoftwareInterruptException()
 	{
 		r14_svc = pc;
-		pc = 8;
+		pc = exception_vector_software_int;
 		spsr_svc = std::bit_cast<u32, CPSR>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -88,7 +88,7 @@ namespace CPU
 	void HandleUndefinedInstructionException()
 	{
 		r14_und = pc;
-		pc = 4;
+		pc = exception_vector_undefined_instr;
 		spsr_und = std::bit_cast<u32, CPSR>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -105,4 +105,13 @@ namespace CPU
 			occurred_exception_priority = priority;
 		}
 	}
+
+
+	template void SignalException<Exception::DataAbort>();
+	template void SignalException<Exception::Fiq>();
+	template void SignalException<Exception::Irq>();
+	template void SignalException<Exception::PrefetchAbort>();
+	template void SignalException<Exception::Reset>();
+	template void SignalException<Exception::SoftwareInterrupt>();
+	template void SignalException<Exception::UndefinedInstruction>();
 }
