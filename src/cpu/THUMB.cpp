@@ -115,41 +115,48 @@ namespace CPU
 	{
 		auto rd = opcode & 7;
 		auto rs = opcode >> 3 & 7;
-		auto offset = opcode >> 6 & 0x1F;
+		auto shift_amount = opcode >> 6 & 0x1F;
 		auto op = opcode >> 11 & 3;
 
 		auto result = [&] {
 			switch (op) {
 			case 0b00: /* LSL */
-				if (offset == 0) {
+				if (shift_amount == 0) {
+					/* LSL#0: No shift performed, ie. directly Rd=Rs, the C flag is NOT affected. */
 					return r[rs];
 				}
 				else {
-					cpsr.carry = GetBit(r[rs], 32 - offset);
-					return r[rs] << offset;
+					cpsr.carry = GetBit(r[rs], 32 - shift_amount);
+					return r[rs] << shift_amount;
 				}
 
 			case 0b01: /* LSR */
-				/* LSR#0 is interpreted as LSR#32 */
-				cpsr.carry = 0;
-				if (offset == 0) {
-					return 0u;
+				if (shift_amount == 0) {
+					/* LSR#0: Interpreted as LSR#32, ie. Rd becomes zero, C becomes Bit 31 of Rs */
+					cpsr.carry = GetBit(r[rs], 31);
+					return 0;
 				}
 				else {
-					return u32(r[rs]) >> offset;
+					cpsr.carry = GetBit(r[rs], shift_amount - 1);
+					return u32(r[rs]) >> shift_amount;
 				}
 
 			case 0b10: /* ASR */
-				/* ASR#0 is interpreted as ASR#32 */
-				cpsr.carry = GetBit(r[rs], 31);
-				if (offset == 0) {
+				if (shift_amount == 0) {
+					/* ASR#0: Interpreted as ASR#32, ie. Rd and C are filled by Bit 31 of Rs. */
+					cpsr.carry = GetBit(r[rs], 31);
 					return cpsr.carry ? 0xFFFF'FFFF : 0;
 				}
 				else {
-					return u32(s32(r[rs]) >> offset);
+					cpsr.carry = GetBit(r[rs], shift_amount - 1);
+					return s32(r[rs]) >> shift_amount;
 				}
 
 			case 0b11: /* ADD/SUB; already covered by other function */
+				assert(false);
+				break;
+
+			default:
 				std::unreachable();
 			}
 		}();
@@ -266,7 +273,7 @@ namespace CPU
 			else if constexpr (instr == ASR) {
 				auto shift_amount = oper2 & 0xFF;
 				if (shift_amount > 0) {
-					cpsr.carry = GetBit(oper1, 31);
+					cpsr.carry = GetBit(oper1, shift_amount - 1);
 					return u32(s32(oper1) >> shift_amount);
 				}
 				else {
@@ -301,8 +308,8 @@ namespace CPU
 			else if constexpr (instr == LSR) {
 				auto shift_amount = oper2 & 0xFF;
 				if (shift_amount > 0) {
-					cpsr.carry = 0;
-					return u32(oper1) >> oper2;
+					cpsr.carry = GetBit(oper1, shift_amount - 1);
+					return u32(oper1) >> shift_amount;
 				}
 				else {
 					return oper1;

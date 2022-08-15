@@ -1,7 +1,6 @@
 module CPU;
 
 import Bus;
-
 import Util.Bit;
 
 #define sp (r[13])
@@ -165,17 +164,17 @@ namespace CPU
 		auto rd = opcode >> 12 & 0xF;
 		auto rn = opcode >> 16 & 0xF;
 		bool set_conds = opcode >> 20 & 1;
-		bool immediate_operand = opcode >> 21 & 1;
+		bool reg_or_imm_oper = opcode >> 21 & 1; /* 0 = register; 1 = immediate */
 
 		u32 oper1 = r[rn];
 		u32 oper2 = [&] {
-			if (immediate_operand) {
+			if (reg_or_imm_oper) { /* immediate */
 				u32 immediate = opcode & 0xFF;
 				auto shift_amount = opcode >> 7 & 0x1E; /* == 2 * (opcode >> 8 & 0xF) */
 				cpsr.carry = immediate >> ((shift_amount - 1) & 0x1F) & 1;
 				return std::rotr(immediate, shift_amount);
 			}
-			else {
+			else { /* register */
 				return GetSecondOperand(opcode);
 			}
 		}();
@@ -382,33 +381,50 @@ namespace CPU
 			}
 		}();
 
-		if (shift_amount == 0) {
-			if (shift_type == 0b11) { /* Special function: rotate right extended */
+		switch (shift_type) {
+		case 0b00: /* logical left */
+			if (shift_amount == 0) {
+				/* LSL#0: No shift performed, ie. directly Op2=Rm, the C flag is NOT affected. */
+				return r[rm];
+			}
+			else {
+				cpsr.carry = GetBit(r[rm], 32 - shift_amount);
+				return r[rm] << shift_amount;
+			}
+
+		case 0b01: /* logical right */
+			if (shift_amount == 0) {
+				/* LSR#0: Interpreted as LSR#32, ie. Op2 becomes zero, C becomes Bit 31 of Rm */
+				cpsr.carry = GetBit(r[rm], 31);
+				return 0;
+			}
+			else {
+				cpsr.carry = GetBit(r[rm], shift_amount - 1);
+				return u32(r[rm]) >> shift_amount;
+			}
+
+		case 0b10: /* arithmetic right */
+			if (shift_amount == 0) {
+				/* ASR#0: Interpreted as ASR#32, ie. Op2 and C are filled by Bit 31 of Rm. */
+				cpsr.carry = GetBit(r[rm], 31);
+				return cpsr.carry ? 0xFFFF'FFFF : 0;
+			}
+			else {
+				cpsr.carry = GetBit(r[rm], shift_amount - 1);
+				return s32(r[rm]) >> shift_amount;
+			}
+
+		case 0b11: /* rotate right */
+			if (shift_amount == 0) {
+				/* ROR#0: Interpreted as RRX#1 (RCR), like ROR#1, but Op2 Bit 31 set to old C. */
 				auto prev_carry = cpsr.carry;
 				cpsr.carry = r[rm] & 1;
 				return u32(r[rm]) >> 1 | prev_carry << 31;
 			}
 			else {
-				return r[rm];
+				cpsr.carry = r[rm] >> ((shift_amount - 1) & 0x1F) & 1;
+				return std::rotr(r[rm], shift_amount);
 			}
-		}
-
-		switch (shift_type) {
-		case 0b00: /* logical left */
-			cpsr.carry = GetBit(r[rm], 32 - shift_amount);
-			return r[rm] << shift_amount;
-
-		case 0b01: /* logical right */
-			cpsr.carry = 0;
-			return u32(r[rm]) >> shift_amount;
-
-		case 0b10: /* arithmetic right */
-			cpsr.carry = GetBit(r[rm], 31);
-			return s32(r[rm]) >> shift_amount;
-
-		case 0b11: /* rotate right */
-			cpsr.carry = r[rm] >> ((shift_amount - 1) & 0x1F) & 1;
-			return std::rotr(r[rm], shift_amount);
 
 		default:
 			std::unreachable();
