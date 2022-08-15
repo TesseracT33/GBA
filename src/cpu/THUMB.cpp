@@ -1,7 +1,6 @@
 module CPU;
 
 import Bus;
-
 import Util.Bit;
 
 #define sp (r[13])
@@ -122,22 +121,33 @@ namespace CPU
 		auto result = [&] {
 			switch (op) {
 			case 0b00: /* LSL */
-				if (offset > 0) {
-					cpsr.carry = GetBit(r[rs], 32 - offset);
+				if (offset == 0) {
+					return r[rs];
 				}
-				return r[rs] << offset;
+				else {
+					cpsr.carry = GetBit(r[rs], 32 - offset);
+					return r[rs] << offset;
+				}
 
 			case 0b01: /* LSR */
-				if (offset > 0) {
-					cpsr.carry = 0;
+				/* LSR#0 is interpreted as LSR#32 */
+				cpsr.carry = 0;
+				if (offset == 0) {
+					return 0u;
 				}
-				return u32(r[rs]) >> offset;
+				else {
+					return u32(r[rs]) >> offset;
+				}
 
 			case 0b10: /* ASR */
-				if (offset > 0) {
-					cpsr.carry = GetBit(r[rs], 31);
+				/* ASR#0 is interpreted as ASR#32 */
+				cpsr.carry = GetBit(r[rs], 31);
+				if (offset == 0) {
+					return cpsr.carry ? 0xFFFF'FFFF : 0;
 				}
-				return u32(s32(r[rs]) >> offset);
+				else {
+					return u32(s32(r[rs]) >> offset);
+				}
 
 			case 0b11: /* ADD/SUB; already covered by other function */
 				std::unreachable();
