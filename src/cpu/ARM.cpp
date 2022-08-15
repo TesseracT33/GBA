@@ -141,8 +141,15 @@ namespace CPU
 	void BranchAndExchange(u32 opcode) /* BX */
 	{
 		auto rn = opcode & 0xF;
-		pc = r[rn] & ~3;
-		SetExecutionState(static_cast<ExecutionState>(rn & 1));
+		pc = r[rn];
+		if (rn & 1) {
+			SetExecutionState(ExecutionState::THUMB);
+			pc &= ~1;
+		}
+		else {
+			SetExecutionState(ExecutionState::ARM);
+			pc &= ~3;
+		}
 		FlushPipeline();
 	}
 
@@ -271,7 +278,7 @@ namespace CPU
 				break;
 
 			case 0b111:
-				SoftwareInterrupt(opcode);
+				SoftwareInterrupt();
 				break;
 			}
 		}
@@ -587,7 +594,7 @@ namespace CPU
 			result = u64(u32(r[rm])) * u64(u32(r[rs]));
 		}
 		else { /* signed */
-			result = s64(r[rm]) * s64(r[rs]);
+			result = s64(s32(r[rm])) * s64(s32(r[rs]));
 		}
 		if (accumulate) {
 			result += r[rd_lo] + (s64(r[rd_hi]) << 32);

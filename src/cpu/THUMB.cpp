@@ -33,22 +33,22 @@ namespace CPU
 			else {
 				using enum ThumbAluInstruction;
 				switch (opcode >> 6 & 0xF) {
-				case 0b0000: Alu<AND>(opcode); break;
-				case 0b0001: Alu<EOR>(opcode); break;
-				case 0b0010: Alu<LSL>(opcode); break;
-				case 0b0011: Alu<LSR>(opcode); break;
-				case 0b0100: Alu<ASR>(opcode); break;
-				case 0b0101: Alu<ADC>(opcode); break;
-				case 0b0110: Alu<SBC>(opcode); break;
-				case 0b0111: Alu<ROR>(opcode); break;
-				case 0b1000: Alu<TST>(opcode); break;
-				case 0b1001: Alu<NEG>(opcode); break;
-				case 0b1010: Alu<CMP>(opcode); break;
-				case 0b1011: Alu<CMN>(opcode); break;
-				case 0b1100: Alu<ORR>(opcode); break;
-				case 0b1101: Alu<MUL>(opcode); break;
-				case 0b1110: Alu<BIC>(opcode); break;
-				case 0b1111: Alu<MVN>(opcode); break;
+				case 0b0000: AluOperation<AND>(opcode); break;
+				case 0b0001: AluOperation<EOR>(opcode); break;
+				case 0b0010: AluOperation<LSL>(opcode); break;
+				case 0b0011: AluOperation<LSR>(opcode); break;
+				case 0b0100: AluOperation<ASR>(opcode); break;
+				case 0b0101: AluOperation<ADC>(opcode); break;
+				case 0b0110: AluOperation<SBC>(opcode); break;
+				case 0b0111: AluOperation<ROR>(opcode); break;
+				case 0b1000: AluOperation<TST>(opcode); break;
+				case 0b1001: AluOperation<NEG>(opcode); break;
+				case 0b1010: AluOperation<CMP>(opcode); break;
+				case 0b1011: AluOperation<CMN>(opcode); break;
+				case 0b1100: AluOperation<ORR>(opcode); break;
+				case 0b1101: AluOperation<MUL>(opcode); break;
+				case 0b1110: AluOperation<BIC>(opcode); break;
+				case 0b1111: AluOperation<MVN>(opcode); break;
 				default: std::unreachable();
 				}
 			}
@@ -57,12 +57,12 @@ namespace CPU
 		case 0b0101:
 			opcode & 0x200
 				? LoadStoreSignExtendedByteHalfword(opcode)
-				: LoadStoreWithRegisterOffset(opcode);
+				: LoadStoreRegOffset(opcode);
 			break;
 
 		case 0b0110:
 		case 0b0111:
-			LoadStoreImmediateOffset(opcode); /* TODO: can also select 'B' here given the different cases */
+			LoadStoreImmOffset(opcode); /* TODO: can also select 'B' here given the different cases */
 			break;
 
 		case 0b1000:
@@ -89,7 +89,7 @@ namespace CPU
 
 		case 0b1101: // TODO: check {cond} on all branch instrs
 			(opcode & 0xF0) == 0xF0
-				? SoftwareInterrupt(opcode)
+				? SoftwareInterrupt()
 				: ConditionalBranch(opcode);
 			break;
 
@@ -107,7 +107,7 @@ namespace CPU
 	}
 
 
-	void Shift(u16 opcode)
+	void Shift(u16 opcode) /* Format 1: ASR, LSL, LSR */
 	{
 		auto rd = opcode & 7;
 		auto rs = opcode >> 3 & 7;
@@ -118,7 +118,7 @@ namespace CPU
 			switch (op) {
 			case 0b00: /* LSL */
 				if (offset > 0) {
-					cpsr.carry = GetBit(r[rs], 31);
+					cpsr.carry = GetBit(r[rs], 32 - offset);
 				}
 				return r[rs] << offset;
 
@@ -145,7 +145,7 @@ namespace CPU
 	}
 
 
-	void AddSubtract(u16 opcode)
+	void AddSubtract(u16 opcode) /* Format 2: ADD, SUB */
 	{
 		auto rd = opcode & 7;
 		auto rs = opcode >> 3 & 7;
@@ -175,9 +175,9 @@ namespace CPU
 	}
 
 
-	void MoveCompareAddSubtractImm(u16 opcode)
+	void MoveCompareAddSubtractImm(u16 opcode) /* Format 3: ADD, CMP, MOV, SUB */
 	{
-		u8 immediate = opcode & 0xFF; /* TODO: signed? */
+		u8 immediate = opcode & 0xFF;
 		auto rd = opcode >> 8 & 7;
 		auto op = opcode >> 11 & 3;
 
@@ -210,6 +210,9 @@ namespace CPU
 				cpsr.negative = GetBit(result, 31);
 				return result;
 			}
+
+			default:
+				std::unreachable();
 			}
 		}();
 
@@ -219,15 +222,22 @@ namespace CPU
 
 
 	template<ThumbAluInstruction instr>
-	void Alu(u16 opcode)
+	void AluOperation(u16 opcode) /* Format 4: ADC, AND, ASR, BIC, CMN, CMP, EOR, LSL, LSR, MUL, MVN, NEG, ORR, ROR, SBC, TST */
 	{
 		using enum ThumbAluInstruction;
 
 		auto rd = opcode & 7;
 		auto rs = opcode >> 3 & 7;
-
 		auto oper1 = r[rd];
 		auto oper2 = r[rs];
+
+		/* Affected Flags:
+			N,Z,C,V for  ADC,SBC,NEG,CMP,CMN
+			N,Z,C   for  LSL,LSR,ASR,ROR (carry flag unchanged if zero shift amount)
+			N,Z,C   for  MUL on ARMv4 and below: carry flag destroyed
+			N,Z     for  MUL on ARMv5 and above: carry flag unchanged
+			N,Z     for  AND,EOR,TST,ORR,BIC,MVN
+		*/
 
 		auto result = [&] {
 			if constexpr (instr == ADC) {
@@ -239,10 +249,14 @@ namespace CPU
 				return oper1 & oper2;
 			}
 			else if constexpr (instr == ASR) {
-				if (oper2 > 0) {
+				auto shift_amount = oper2 & 0xFF;
+				if (shift_amount > 0) {
 					cpsr.carry = GetBit(oper1, 31);
+					return u32(s32(oper1) >> shift_amount);
 				}
-				return s32(oper1) >> oper2;
+				else {
+					return oper1;
+				}
 			}
 			else if constexpr (instr == BIC) {
 				return oper1 & ~oper2;
@@ -260,35 +274,48 @@ namespace CPU
 				return oper1 ^ oper2;
 			}
 			else if constexpr (instr == LSL) {
-				if (oper2 > 0) {
-					cpsr.carry = oper2 <= 32 ? GetBit(oper1, 32 - oper2) : 0;
+				auto shift_amount = oper2 & 0xFF;
+				if (shift_amount > 0) {
+					cpsr.carry = shift_amount <= 32 ? GetBit(oper1, 32 - shift_amount) : 0;
+					return oper1 << shift_amount;
 				}
-				return oper1 << oper2;
+				else {
+					return oper1;
+				}
 			}
 			else if constexpr (instr == LSR) {
-				if (oper2 > 0) {
+				auto shift_amount = oper2 & 0xFF;
+				if (shift_amount > 0) {
 					cpsr.carry = 0;
+					return u32(oper1) >> oper2;
 				}
-				return u32(oper1) >> oper2;
+				else {
+					return oper1;
+				}
 			}
 			else if constexpr (instr == MUL) {
-				/* TODO: carry */
+				cpsr.carry = 0;
 				return oper1 * oper2;
 			}
 			else if constexpr (instr == MVN) {
 				return ~oper2;
 			}
 			else if constexpr (instr == NEG) {
+				cpsr.carry = oper2 > 0;
 				return -s32(oper2);
 			}
 			else if constexpr (instr == ORR) {
 				return oper1 | oper2;
 			}
 			else if constexpr (instr == ROR) {
-				if (oper2 > 0) {
-					cpsr.carry = oper1 >> ((oper2 - 1) & 0x1F) & 1;
+				auto shift_amount = oper2 & 0xFF;
+				if (shift_amount > 0) {
+					cpsr.carry = oper1 >> ((shift_amount - 1) & 0x1F) & 1;
+					return std::rotr(oper1, shift_amount);
 				}
-				return std::rotr(oper1, oper2);
+				else {
+					return oper1;
+				}
 			}
 			else if constexpr (instr == SBC) {
 				cpsr.carry = u64(oper2) + u64(!cpsr.carry) > u64(oper1);
@@ -304,13 +331,13 @@ namespace CPU
 		}
 		cpsr.zero = result == 0;
 		cpsr.negative = GetBit(result, 31);
-		if constexpr (instr == ADC || instr == CMN || instr == CMP || instr == SBC) {
+		if constexpr (instr == ADC || instr == CMN || instr == CMP || instr == NEG || instr == SBC) {
 			cpsr.overflow = GetBit((oper1 ^ result) & (oper2 ^ result), 31);
 		}
 	}
 
 
-	void HiReg(u16 opcode)
+	void HiReg(u16 opcode) /* Format 5: ADD, BX, CMP, MOV */
 	{
 		auto rd = opcode & 7;
 		auto rs = opcode >> 3 & 7;
@@ -341,21 +368,32 @@ namespace CPU
 
 		case 0b11: /* BX */
 			pc = r[rs];
-			SetExecutionState(static_cast<ExecutionState>(r[rs] & 1));
+			if (rs & 1) {
+				SetExecutionState(ExecutionState::THUMB);
+				pc &= ~1;
+			}
+			else {
+				SetExecutionState(ExecutionState::ARM);
+				pc &= ~3;
+			}
+			FlushPipeline();
 			break;
+
+		default:
+			std::unreachable();
 		}
 	}
 
 
-	void PcRelativeLoad(u16 opcode)
+	void PcRelativeLoad(u16 opcode) /* Format 6: LDR */
 	{
-		u32 offset = (opcode & 0xFF) << 2; /* unsigned */
+		u32 offset = (opcode & 0xFF) << 2;
 		auto rd = opcode >> 8 & 7;
-		r[rd] = Bus::Read<s32>(pc + offset);
+		r[rd] = Bus::Read<u32>((pc & ~2) + offset);
 	}
 
 
-	void LoadStoreWithRegisterOffset(u16 opcode)
+	void LoadStoreRegOffset(u16 opcode) /* Format 7: LDR, LDRB, STR, STRB */
 	{
 		auto rd = opcode & 7;
 		auto rb = opcode >> 3 & 7;
@@ -363,16 +401,16 @@ namespace CPU
 		bool byte_or_word = opcode >> 10 & 1; /* 0: word; 1: byte */
 		bool load_or_store = opcode >> 11 & 1; /* 0: store; 1: load */
 		auto addr = r[rb] + r[ro];
-		if (load_or_store == 0) {
-			byte_or_word ? Bus::Write<u8>(addr, r[rd]) : Bus::Write<u32>(addr, r[rd]);
+		if (load_or_store == 0) { /* store */
+			byte_or_word ? Bus::Write<u8>(addr, u8(r[rd])) : Bus::Write<u32>(addr, r[rd]);
 		}
-		else {
-			r[rd] = byte_or_word ? Bus::Read<u8>(addr) : Bus::Read<u32>(addr); /* TODO: sign-extension? */
+		else { /* load */
+			r[rd] = byte_or_word ? Bus::Read<u8>(addr) : Bus::Read<u32>(addr); 
 		}
 	}
 
 
-	void LoadStoreSignExtendedByteHalfword(u16 opcode)
+	void LoadStoreSignExtendedByteHalfword(u16 opcode) /* Format 8: LDSB, LDRH, LDSH, STRH */
 	{
 		auto rd = opcode & 7;
 		auto rb = opcode >> 3 & 7;
@@ -381,7 +419,7 @@ namespace CPU
 		auto addr = r[rb] + r[ro];
 		switch (op) {
 		case 0b00: /* Store halfword */
-			Bus::Write<s16>(addr, s16(r[rd] & 0xFFFF));
+			Bus::Write<s16>(addr, s16(r[rd]));
 			break;
 
 		case 0b01: /* Load sign-extended byte */
@@ -395,18 +433,22 @@ namespace CPU
 		case 0b11: /* Load sign-extended halfword */
 			r[rd] = Bus::Read<s16>(addr);
 			break;
+
+		default:
+			std::unreachable();
 		}
 	}
 
 
-	void LoadStoreImmediateOffset(u16 opcode)
+	void LoadStoreImmOffset(u16 opcode) /* Format 9: LDR, LDRB, STR, STRB */
 	{
 		auto rd = opcode & 7;
 		auto rb = opcode >> 3 & 7;
 		bool load_or_store = opcode >> 11 & 1; /* 0: store; 1: load */
 		bool byte_or_word = opcode >> 12 & 1; /* 0: word; 1: byte */
-		if (byte_or_word == 0) {
-			auto offset = opcode >> 4 & 0x7C; /* == (opcode >> 6 & 0x1F) << 2 */ /* TODO: signed? */
+		/* unsigned offset is 0-31 for byte, 0-124 (step 4) for word */
+		if (byte_or_word == 0) { /* word */
+			auto offset = opcode >> 4 & 0x7C; /* == (opcode >> 6 & 0x1F) << 2 */
 			auto addr = r[rb] + offset;
 			if (load_or_store == 0) {
 				Bus::Write<u32>(addr, r[rd]);
@@ -415,38 +457,38 @@ namespace CPU
 				r[rd] = Bus::Read<u32>(addr);
 			}
 		}
-		else {
-			auto offset = opcode >> 6 & 0x1F; /* TODO: signed? */
+		else { /* byte */
+			auto offset = opcode >> 6 & 0x1F;
 			auto addr = r[rb] + offset;
 			if (load_or_store == 0) {
-				Bus::Write<u8>(addr, u8(r[rd] & 0xFF));
+				Bus::Write<u8>(addr, u8(r[rd]));
 			}
 			else {
-				r[rd] = Bus::Read<u8>(addr); /* TODO: zero or sign extension? */
+				r[rd] = Bus::Read<u8>(addr);
 			}
 		}
 	}
 
 
-	void LoadStoreHalfword(u16 opcode)
+	void LoadStoreHalfword(u16 opcode) /* Format 10: LDRH, STRH */
 	{
 		auto rd = opcode & 7;
 		auto rb = opcode >> 3 & 7;
-		auto offset = opcode >> 5 & 0x3E; /* == (opcode >> 6 & 0x1F) << 1 */  /* TODO: signed? */
+		auto offset = opcode >> 5 & 0x3E; /* == (opcode >> 6 & 0x1F) << 1 */
 		bool load_or_store = opcode >> 11 & 1; /* 0: store; 1: load */
 		auto addr = r[rb] + offset;
-		if (load_or_store == 0) {
+		if (load_or_store == 0) { 
 			Bus::Write<u16>(addr, r[rd]);
 		}
 		else {
-			r[rd] = Bus::Read<u16>(addr); /* TODO: sign-extension? */
+			r[rd] = Bus::Read<u16>(addr);
 		}
 	}
 
 
-	void SpRelativeLoadStore(u16 opcode)
+	void SpRelativeLoadStore(u16 opcode) /* Format 11: LDR, STR */
 	{
-		u8 immediate = opcode & 0xFF; /* unsigned */
+		u8 immediate = opcode & 0xFF;
 		auto rd = opcode >> 8 & 7;
 		bool load_or_store = opcode >> 11 & 1; /* 0: store; 1: load */
 		auto addr = sp + (immediate << 2); 
@@ -459,28 +501,32 @@ namespace CPU
 	}
 
 
-	void LoadAddress(u16 opcode)
+	void LoadAddress(u16 opcode) /* Format 12: ADD Rd,PC,#nn; ADD Rd,SP,#nn */
 	{
-		u8 immediate = opcode & 0xFF; /* TODO: signed? */
+		u8 immediate = opcode & 0xFF;
 		auto rd = opcode >> 8 & 7;
 		auto src = opcode >> 11 & 1; /* 0: PC (r15); 1: SP (r13) */
-		auto addr = r[15 - 2 * src] + (immediate << 2);
-		r[rd] = Bus::Read<u32>(addr);
+		if (src == 0) {
+			r[rd] = (pc & ~2) + (immediate << 2);
+		}
+		else {
+			r[rd] = sp + (immediate << 2);
+		}
 	}
 
 
-	void AddOffsetToStackPointer(u16 opcode)
+	void AddOffsetToStackPointer(u16 opcode) /* Format 13: ADD SP,#nn */
 	{
 		s16 offset = (opcode & 0x7F) << 2;
 		bool sign = opcode >> 7 & 1; /* 0: positive offset; 1: negative offset */
 		if (sign == 1) {
-			offset = -offset; /* [-508, 508] */
+			offset = -offset; /* [-508, 508] in steps of 4 */
 		}
 		sp += offset;
 	}
 
 
-	void PushPopRegisters(u16 opcode)
+	void PushPopRegisters(u16 opcode) /* Format 14: PUSH, POP */
 	{
 		auto reg_list = opcode & 0xFF;
 		bool transfer_lr_pc = opcode >> 8 & 1; /* 0: Do not store LR / load PC; 1: Store LR / Load PC */
@@ -502,63 +548,80 @@ namespace CPU
 				}
 			}
 			if (transfer_lr_pc) {
-				pc = Bus::Read<u32>(sp++);
+				pc = Bus::Read<u32>(sp++) & ~1;
 			}
 		}
 	}
 
 
-	void MultipleLoadStore(u16 opcode)
+	void MultipleLoadStore(u16 opcode) /* Format 15: LDMIA, STMIA */
 	{
 		auto reg_list = opcode & 0xFF;
 		auto rb = opcode >> 8 & 7;
 		bool load_or_store = opcode >> 11 & 1; /* 0: store; 1: load */
-		auto addr = r[rb];
+		/* Strange Effects on Invalid Rlist's
+			* Empty Rlist: R15 loaded/stored (ARMv4 only), and Rb=Rb+40h (ARMv4-v5).
+			* Writeback with Rb included in Rlist: Store OLD base if Rb is FIRST entry in Rlist,
+			otherwise store NEW base (STM/ARMv4). Always store OLD base (STM/ARMv5), no writeback (LDM/ARMv4/ARMv5).
+			TODO: emulate 2nd point
+		*/
 		if (load_or_store) {
-			for (int i = 0; i < 8; ++i) {
-				if (reg_list & 1 << i) {
-					r[i] = Bus::Read<u32>(addr);
-					addr += 4;
+			if (reg_list == 0) {
+				pc = Bus::Read<u32>(r[rb]);
+				r[rb] += 0x40;
+			}
+			else {
+				for (int i = 0; i < 8; ++i) {
+					if (reg_list & 1 << i) {
+						r[i] = Bus::Read<u32>(r[rb]);
+						r[rb] += 4;
+					}
 				}
 			}
 		}
 		else {
-			for (int i = 0; i < 8; ++i) {
-				if (reg_list & 1 << i) {
-					Bus::Write<u32>(addr, r[i]);
-					addr += 4;
+			if (reg_list == 0) {
+				pc = Bus::Read<u32>(r[rb]);
+				r[rb] += 0x40;
+			}
+			else {
+				for (int i = 0; i < 8; ++i) {
+					if (reg_list & 1 << i) {
+						Bus::Write<u32>(r[rb], r[i]);
+						r[rb] += 4;
+					}
 				}
 			}
 		}
-		r[rb] = addr;
+		
 	}
 
 
-	void ConditionalBranch(u16 opcode)
+	void ConditionalBranch(u16 opcode) /* Format 16: BEQ, BNE, BCS, BCC, BMI, BPL, BVS, BVC, BHI, BLS, BGE, BLT, BGT, BLE */
 	{
 		auto cond = opcode >> 8 & 0xF;
 		bool branch = CheckCondition(cond);
 		if (branch) {
-			s32 offset = SignExtend<s32, 9>(opcode << 1 & 0x1FE);
+			s32 offset = SignExtend<s32, 9>(opcode << 1 & 0x1FE); /* [-256, 254] in steps of 2 */
 			pc += offset;
 		}
 	}
 
 
-	void SoftwareInterrupt(u16 opcode)
+	void SoftwareInterrupt() /* Format 17: SWI */
 	{
 		SignalException<Exception::SoftwareInterrupt>();
 	}
 
 
-	void UnconditionalBranch(u16 opcode)
+	void UnconditionalBranch(u16 opcode) /* Format 18: B */
 	{
-		s32 offset = SignExtend<s32, 12>(opcode << 1 & 0xFFE);
+		s32 offset = SignExtend<s32, 12>(opcode << 1 & 0xFFE); /* [-2048, 2046] in steps of 2 */
 		pc += offset;
 	}
 
 
-	void LongBranchWithLink(u16 opcode)
+	void LongBranchWithLink(u16 opcode) /* Format 19: BL */
 	{
 		auto immediate = opcode & 0x7FF;
 		bool low_or_high_offset = opcode >> 11 & 1; /* 0: offset high; 1: offset low */
@@ -569,9 +632,8 @@ namespace CPU
 		else {
 			s32 offset = immediate << 1;
 			lr += offset;
-			s32 prev_pc = pc;
-			pc = lr;
-			lr = prev_pc | 1;
+			std::swap(pc, lr);
+			lr |= 1;
 		}
 	}
 }

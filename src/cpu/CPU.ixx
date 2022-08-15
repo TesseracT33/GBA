@@ -86,25 +86,26 @@ namespace CPU
 	void SingleDataTransfer(u32 opcode);
 
 	/* THUMB instructions */
-	void Shift(u16 opcode);
-	void AddSubtract(u16 opcode);
-	void MoveCompareAddSubtractImm(u16 opcode);
-	template<ThumbAluInstruction> void Alu(u16 opcode);
-	void HiReg(u16 opcode);
-	void PcRelativeLoad(u16 opcode);
-	void LoadStoreWithRegisterOffset(u16 opcode);
-	void LoadStoreSignExtendedByteHalfword(u16 opcode);
-	void LoadStoreImmediateOffset(u16 opcode);
-	void LoadStoreHalfword(u16 opcode);
-	void SpRelativeLoadStore(u16 opcode);
-	void LoadAddress(u16 opcode);
 	void AddOffsetToStackPointer(u16 opcode);
-	void PushPopRegisters(u16 opcode);
-	void MultipleLoadStore(u16 opcode);
+	void AddSubtract(u16 opcode);
+	template<ThumbAluInstruction> void AluOperation(u16 opcode);
 	void ConditionalBranch(u16 opcode);
-	void SoftwareInterrupt(u16 opcode);
-	void UnconditionalBranch(u16 opcode);
+	void HiReg(u16 opcode);
+	void LoadAddress(u16 opcode);
+	void LoadStoreImmOffset(u16 opcode);
+	void LoadStoreHalfword(u16 opcode);
+	void LoadStoreRegOffset(u16 opcode);
+	void LoadStoreSignExtendedByteHalfword(u16 opcode);
 	void LongBranchWithLink(u16 opcode);
+	void MoveCompareAddSubtractImm(u16 opcode);
+	void MultipleLoadStore(u16 opcode);
+	void PcRelativeLoad(u16 opcode);
+	void PushPopRegisters(u16 opcode);
+	void Shift(u16 opcode);
+	void SpRelativeLoadStore(u16 opcode);
+	void UnconditionalBranch(u16 opcode);
+
+	void SoftwareInterrupt();
 
 	constexpr u32 cpsr_mode_bits_user = 16;
 	constexpr u32 cpsr_mode_bits_fiq = 17;
