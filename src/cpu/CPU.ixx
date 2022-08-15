@@ -92,7 +92,7 @@ namespace CPU
 	void ConditionalBranch(u16 opcode);
 	void HiReg(u16 opcode);
 	void LoadAddress(u16 opcode);
-	void LoadStoreImmOffset(u16 opcode);
+	template<bool> void LoadStoreImmOffset(u16 opcode);
 	void LoadStoreHalfword(u16 opcode);
 	void LoadStoreRegOffset(u16 opcode);
 	void LoadStoreSignExtendedByteHalfword(u16 opcode);

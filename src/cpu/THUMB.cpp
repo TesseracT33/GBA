@@ -12,11 +12,10 @@ namespace CPU
 {
 	void DecodeExecuteTHUMB(u16 opcode)
 	{
-		switch (opcode >> 12 & 0xF)
-		{
+		switch (opcode >> 12 & 0xF) {
 		case 0b0000:
 		case 0b0001:
-			(opcode & 0x180) == 0x180
+			(opcode & 0x1800) == 0x1800
 				? AddSubtract(opcode)
 				: Shift(opcode);
 			break;
@@ -27,28 +26,31 @@ namespace CPU
 			break;
 
 		case 0b0100:
-			if (opcode & 0x400) {
+			if (opcode & 0x800) {
+				PcRelativeLoad(opcode);
+			}
+			else if (opcode & 0x400) {
 				HiReg(opcode);
 			}
 			else {
 				using enum ThumbAluInstruction;
 				switch (opcode >> 6 & 0xF) {
-				case 0b0000: AluOperation<AND>(opcode); break;
-				case 0b0001: AluOperation<EOR>(opcode); break;
-				case 0b0010: AluOperation<LSL>(opcode); break;
-				case 0b0011: AluOperation<LSR>(opcode); break;
-				case 0b0100: AluOperation<ASR>(opcode); break;
-				case 0b0101: AluOperation<ADC>(opcode); break;
-				case 0b0110: AluOperation<SBC>(opcode); break;
-				case 0b0111: AluOperation<ROR>(opcode); break;
-				case 0b1000: AluOperation<TST>(opcode); break;
-				case 0b1001: AluOperation<NEG>(opcode); break;
-				case 0b1010: AluOperation<CMP>(opcode); break;
-				case 0b1011: AluOperation<CMN>(opcode); break;
-				case 0b1100: AluOperation<ORR>(opcode); break;
-				case 0b1101: AluOperation<MUL>(opcode); break;
-				case 0b1110: AluOperation<BIC>(opcode); break;
-				case 0b1111: AluOperation<MVN>(opcode); break;
+				case  0: AluOperation<AND>(opcode); break;
+				case  1: AluOperation<EOR>(opcode); break;
+				case  2: AluOperation<LSL>(opcode); break;
+				case  3: AluOperation<LSR>(opcode); break;
+				case  4: AluOperation<ASR>(opcode); break;
+				case  5: AluOperation<ADC>(opcode); break;
+				case  6: AluOperation<SBC>(opcode); break;
+				case  7: AluOperation<ROR>(opcode); break;
+				case  8: AluOperation<TST>(opcode); break;
+				case  9: AluOperation<NEG>(opcode); break;
+				case 10: AluOperation<CMP>(opcode); break;
+				case 11: AluOperation<CMN>(opcode); break;
+				case 12: AluOperation<ORR>(opcode); break;
+				case 13: AluOperation<MUL>(opcode); break;
+				case 14: AluOperation<BIC>(opcode); break;
+				case 15: AluOperation<MVN>(opcode); break;
 				default: std::unreachable();
 				}
 			}
@@ -61,8 +63,11 @@ namespace CPU
 			break;
 
 		case 0b0110:
+			LoadStoreImmOffset<0>(opcode);
+			break;
+
 		case 0b0111:
-			LoadStoreImmOffset(opcode); /* TODO: can also select 'B' here given the different cases */
+			LoadStoreImmOffset<1>(opcode);
 			break;
 
 		case 0b1000:
@@ -87,8 +92,8 @@ namespace CPU
 			MultipleLoadStore(opcode);
 			break;
 
-		case 0b1101: // TODO: check {cond} on all branch instrs
-			(opcode & 0xF0) == 0xF0
+		case 0b1101:
+			(opcode & 0xF00) == 0xF00
 				? SoftwareInterrupt()
 				: ConditionalBranch(opcode);
 			break;
@@ -440,14 +445,14 @@ namespace CPU
 	}
 
 
+	template<bool byte_or_word /* 0: word; 1: byte */ >
 	void LoadStoreImmOffset(u16 opcode) /* Format 9: LDR, LDRB, STR, STRB */
 	{
 		auto rd = opcode & 7;
 		auto rb = opcode >> 3 & 7;
 		bool load_or_store = opcode >> 11 & 1; /* 0: store; 1: load */
-		bool byte_or_word = opcode >> 12 & 1; /* 0: word; 1: byte */
 		/* unsigned offset is 0-31 for byte, 0-124 (step 4) for word */
-		if (byte_or_word == 0) { /* word */
+		if constexpr (byte_or_word == 0) { /* word */
 			auto offset = opcode >> 4 & 0x7C; /* == (opcode >> 6 & 0x1F) << 2 */
 			auto addr = r[rb] + offset;
 			if (load_or_store == 0) {
