@@ -38,8 +38,7 @@ namespace CPU
 		User, Fiq, Irq, Supervisor, Abort, Undefined, System
 	};
 
-	// ARM 
-	enum class DataProcessingInstruction {
+	enum class ArmDataProcessingInstruction {
 		ADC, ADD, AND, BIC, CMN, CMP, EOR, MOV, MVN, ORR, RSB, RSC, SBC, SUB, TEQ, TST
 	};
 
@@ -47,7 +46,6 @@ namespace CPU
 		Register, Immediate
 	};
 
-	// THUMB
 	enum class ThumbAluInstruction {
 		ADC, AND, ASR, BIC, CMN, CMP, EOR, LSL, LSR, MUL, MVN, NEG, ORR, ROR, SBC, TST
 	};
@@ -68,18 +66,17 @@ namespace CPU
 	void HandleResetException();
 	void HandleSoftwareInterruptException();
 	void HandleUndefinedInstructionException();
-	void SetExecutionState(ExecutionState mode);
+	void SetExecutionState(ExecutionState state);
 	template<Mode> void SetMode();
 	template<Exception> void SignalException();
 	void StallPipeline(uint cycles);
 	void StepPipeline();
-	void WriteCPSR(u32 value);
 
 	/* ARM instructions */
 	template<bool> void BlockDataTransfer(u32 opcode);
 	void Branch(u32 opcode);
 	void BranchAndExchange(u32 opcode);
-	template<DataProcessingInstruction> void DataProcessing(u32 opcode);
+	template<ArmDataProcessingInstruction> void DataProcessing(u32 opcode);
 	template<OffsetType> void HalfwordDataTransfer(u32 opcode);
 	void MRS(u32 opcode);
 	void MSR(u32 opcode);
@@ -116,7 +113,6 @@ namespace CPU
 	constexpr u32 cpsr_mode_bits_abort = 23;
 	constexpr u32 cpsr_mode_bits_undefined = 27;
 	constexpr u32 cpsr_mode_bits_system = 31;
-
 	constexpr u32 exception_vector_reset = 0;
 	constexpr u32 exception_vector_undefined_instr = 4;
 	constexpr u32 exception_vector_software_int = 8;

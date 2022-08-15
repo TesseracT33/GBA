@@ -96,10 +96,13 @@ namespace CPU
 	}
 
 
-	void SetExecutionState(ExecutionState mode)
+	void SetExecutionState(ExecutionState state)
 	{
-		execution_state = mode;
-		cpsr.state = std::to_underlying(mode);
+		if (execution_state != state) {
+			execution_state = state;
+			cpsr.state = std::to_underlying(state);
+			FlushPipeline();
+		}
 	}
 
 
@@ -248,30 +251,11 @@ namespace CPU
 	}
 
 
-	void WriteCPSR(u32 value)
-	{
-		if (cpsr.mode == cpsr_mode_bits_user) {
-			/* bits 0-7 may not be written */
-			u32 prev_cpsr_u32 = std::bit_cast<u32, CPSR>(cpsr);
-			u32 new_cpsr_u32 = value & ~0xFF | prev_cpsr_u32 & 0xFF;
-			cpsr = std::bit_cast<CPSR, u32>(new_cpsr_u32);
-		}
-		else {
-			/* TODO: can upper four bits be written? */
-			cpsr = std::bit_cast<CPSR, u32>(value);
-			switch (cpsr.mode) {
-			case cpsr_mode_bits_user      : SetMode<Mode::User>(); break;
-			case cpsr_mode_bits_fiq       : SetMode<Mode::Fiq>(); break;
-			case cpsr_mode_bits_irq       : SetMode<Mode::Irq>(); break;
-			case cpsr_mode_bits_supervisor: SetMode<Mode::Supervisor>(); break;
-			case cpsr_mode_bits_abort     : SetMode<Mode::Abort>(); break;
-			case cpsr_mode_bits_undefined : SetMode<Mode::Undefined>(); break;
-			case cpsr_mode_bits_system    : SetMode<Mode::System>(); break;
-			default: assert(false); break;
-			}
-			execution_state = cpsr.state == 0
-				? ExecutionState::ARM
-				: ExecutionState::THUMB;
-		}
-	}
+	template void SetMode<Mode::User>();
+	template void SetMode<Mode::Fiq>();
+	template void SetMode<Mode::Irq>();
+	template void SetMode<Mode::Supervisor>();
+	template void SetMode<Mode::Abort>();
+	template void SetMode<Mode::Undefined>();
+	template void SetMode<Mode::System>();
 }

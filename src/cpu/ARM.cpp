@@ -125,7 +125,7 @@ namespace CPU
 	}
 
 
-	void Branch(u32 opcode)
+	void Branch(u32 opcode) /* B, BL */
 	{
 		s32 offset = SignExtend<s32, 24>(opcode & 0xFF'FFFF);
 		bool link = opcode & 1 << 24;
@@ -138,7 +138,7 @@ namespace CPU
 	}
 
 
-	void BranchAndExchange(u32 opcode)
+	void BranchAndExchange(u32 opcode) /* BX */
 	{
 		auto rn = opcode & 0xF;
 		pc = r[rn] & ~3;
@@ -147,10 +147,10 @@ namespace CPU
 	}
 
 
-	template<DataProcessingInstruction instr>
-	void DataProcessing(u32 opcode)
+	template<ArmDataProcessingInstruction instr>
+	void DataProcessing(u32 opcode) /* ADC, ADD, AND, BIC, CMN, CMP, EOR, MOV, MVN, ORR, RSB, RSC, SBC, SUB, TEQ, TST */
 	{
-		using enum DataProcessingInstruction;
+		using enum ArmDataProcessingInstruction;
 
 		static constexpr bool is_arithmetic_instr = instr == ADC || instr == ADD || instr == CMN ||
 			instr == CMP || instr == RSB || instr == RSC || instr == SBC || instr == SUB;
@@ -295,13 +295,13 @@ namespace CPU
 					MultiplyLong(opcode);
 				}
 				else if ((opcode & 0xF400F90) == 0x90) {
-					//HalfwordDataTransferRegisterOffset(opcode);
+					HalfwordDataTransfer<OffsetType::Register>(opcode);
 				}
 				else if ((opcode & 0xF400090) == 0x400090) {
-					//HalfwordDataTransferImmediateOffset(opcode);
+					HalfwordDataTransfer<OffsetType::Immediate>(opcode);
 				}
 				else {
-					using enum DataProcessingInstruction;
+					using enum ArmDataProcessingInstruction;
 					switch (opcode >> 21 & 0xF) {
 					case 0b0000: DataProcessing<AND>(opcode); break;
 					case 0b0001: DataProcessing<EOR>(opcode); break;
@@ -335,7 +335,7 @@ namespace CPU
 						break;
 
 					case 0b1001: 
-						if ((opcode & 0xFBFFFF0) == 0x129F000 || (opcode & 0xFBFF000) == 0x329F000) {
+						if ((opcode & 0xFB0FFF0) == 0x120F000 || (opcode & 0xFB0F000) == 0x320F000) {
 							MSR(opcode);
 						}
 						else {
@@ -377,9 +377,9 @@ namespace CPU
 
 		if (shift_amount == 0) {
 			if (shift_type == 0b11) { /* Special function: rotate right extended */
-				u32 result = u32(r[rm]) >> 1 | cpsr.carry << 31;
+				auto prev_carry = cpsr.carry;
 				cpsr.carry = r[rm] & 1;
-				return result;
+				return u32(r[rm]) >> 1 | prev_carry << 31;
 			}
 			else {
 				return r[rm];
@@ -471,43 +471,74 @@ namespace CPU
 	}
 
 
-	void MRS(u32 opcode)
+	void MRS(u32 opcode) /* MRS */
 	{
 		auto rd = opcode >> 12 & 0xF;
 		bool psr = opcode >> 22 & 1; /* 0=CPSR; 1=SPSR */
-		if (psr == 0) {
-			r[rd] = std::bit_cast<u32, decltype(cpsr)>(cpsr);
+		r[rd] = psr ? spsr : std::bit_cast<u32, CPSR>(cpsr);
+	}
+
+
+	void MSR(u32 opcode) /* MSR */
+	{
+		bool dst_psr = opcode >> 22 & 1; /* 0=CPSR; 1=SPSR */
+		auto mode = cpsr.mode;
+		if (dst_psr == 1 && (mode == cpsr_mode_bits_user || mode == cpsr_mode_bits_system)) {
+			return; /* User/System modes do not have a SPSR */
+		}
+
+		bool imm_or_reg = opcode >> 25 & 1; /* 0=Register; 1=Immediate */
+		u32 oper = [&] {
+			if (imm_or_reg == 0) { /* register */
+				auto rm = opcode & 0xF;
+				return r[rm];
+			}
+			else { /* immediate */
+				return GetSecondOperand(opcode);
+			}
+		}();
+
+		u32 mask{};
+		if (mode == cpsr_mode_bits_user) {
+			mask |= 0xF0000000 * GetBit(opcode, 19); /* User mode can only change the flag bits */
+			if (dst_psr == 0) {
+				u32 prev_cpsr = std::bit_cast<u32, CPSR>(cpsr);
+				cpsr = std::bit_cast<CPSR, u32>(oper & mask | prev_cpsr & ~mask);
+			}
+			else {
+				spsr = oper & mask | spsr & ~mask;
+			}
 		}
 		else {
-			r[rd] = spsr;
+			mask |= 0xFF000000 * GetBit(opcode, 19);
+			mask |= 0x00FF0000 * GetBit(opcode, 18);
+			mask |= 0x0000FF00 * GetBit(opcode, 17);
+			mask |= 0x000000FF * GetBit(opcode, 16);
+			if (dst_psr == 0) {
+				if (mask & 0xFF) {
+					switch (oper & 0x1F) {
+					case cpsr_mode_bits_user: SetMode<Mode::User>(); break;
+					case cpsr_mode_bits_fiq: SetMode<Mode::Fiq>(); break;
+					case cpsr_mode_bits_irq: SetMode<Mode::Irq>(); break;
+					case cpsr_mode_bits_supervisor: SetMode<Mode::Supervisor>(); break;
+					case cpsr_mode_bits_abort: SetMode<Mode::Abort>(); break;
+					case cpsr_mode_bits_undefined: SetMode<Mode::Undefined>(); break;
+					case cpsr_mode_bits_system: SetMode<Mode::System>(); break;
+					default: assert(false); break;
+					}
+					SetExecutionState(static_cast<ExecutionState>(GetBit(oper, 5)));
+				}
+				u32 prev_cpsr = std::bit_cast<u32, CPSR>(cpsr);
+				cpsr = std::bit_cast<CPSR, u32>(oper & mask | prev_cpsr & ~mask);
+			}
+			else {
+				spsr = oper & mask | spsr & ~mask;
+			}
 		}
 	}
 
 
-	void MSR(u32 opcode)
-	{
-		//bool dest_psr = opcode >> 22 & 1; /* 0=CPSR; 1=SPSR */
-		//bool immediate_operand = opcode >> 25 & 1; /* 0=Register; 1=Immediate */
-		//u32 operand = [&] {
-		//	if (immediate_operand) {
-		//		return GetSecondOperand(opcode); /* TODO: need to specialize this function for this instr? */
-		//	}
-		//	else {
-		//		auto rm = opcode & 0xF;
-		//		return r[rm];
-		//	}
-		//}();
-		//if (dest_psr == 0) {
-		//	u32 cpsr_u32 = std::bit_cast<u32, CPSR>(cpsr);
-		//	cpsr = std::bit_cast<CPSR, u32>(operand & 0xF000'0000 | cpsr_u32 & 0xFFF'FFFF);
-		//}
-		//else {
-		//	spsr = operand | spsr & 0xFFF'FFFF;
-		//}
-	}
-
-
-	void Multiply(u32 opcode)
+	void Multiply(u32 opcode) /* MUL, MLA */
 	{
 		auto rm = opcode & 0xF;
 		auto rs = opcode >> 8 & 0xF;
@@ -542,7 +573,7 @@ namespace CPU
 	}
 
 
-	void MultiplyLong(u32 opcode)
+	void MultiplyLong(u32 opcode) /* MULL, MLAL */
 	{
 		auto rm = opcode & 0xF;
 		auto rs = opcode >> 8 & 0xF;
