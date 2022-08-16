@@ -126,13 +126,12 @@ namespace CPU
 
 	void Branch(u32 opcode) /* B, BL */
 	{
-		s32 offset = SignExtend<s32, 24>(opcode & 0xFF'FFFF);
+		s32 offset = SignExtend<s32, 26>((opcode & 0xFF'FFFF) << 2);
 		bool link = opcode & 1 << 24;
 		if (link) {
 			lr = pc;
 		}
 		pc += offset;
-		pc &= ~3;
 		FlushPipeline();
 	}
 
@@ -150,6 +149,7 @@ namespace CPU
 			pc &= ~3;
 		}
 		FlushPipeline();
+		/* TODO: Switching to THUMB Mode: Set Bit 0 of the value in Rn to 1, program continues then at Rn-1 in THUMB mode. */
 	}
 
 
@@ -237,7 +237,20 @@ namespace CPU
 
 		if (set_conds) {
 			if (rd == 15) {
-				cpsr = std::bit_cast<CPSR, u32>(spsr);
+				if (cpsr.mode != cpsr_mode_bits_user && cpsr.mode != cpsr_mode_bits_system) {
+					switch (spsr & 0x1F) {
+					case cpsr_mode_bits_user: SetMode<Mode::User>(); break;
+					case cpsr_mode_bits_fiq: SetMode<Mode::Fiq>(); break;
+					case cpsr_mode_bits_irq: SetMode<Mode::Irq>(); break;
+					case cpsr_mode_bits_supervisor: SetMode<Mode::Supervisor>(); break;
+					case cpsr_mode_bits_abort: SetMode<Mode::Abort>(); break;
+					case cpsr_mode_bits_undefined: SetMode<Mode::Undefined>(); break;
+					case cpsr_mode_bits_system: SetMode<Mode::System>(); break;
+					default: assert(false); break;
+					}
+					SetExecutionState(static_cast<ExecutionState>(GetBit(spsr, 5)));
+					cpsr = std::bit_cast<CPSR, u32>(spsr);
+				}
 			}
 			else {
 				cpsr.zero = result == 0;
@@ -498,15 +511,15 @@ namespace CPU
 	{
 		auto rd = opcode >> 12 & 0xF;
 		bool psr = opcode >> 22 & 1; /* 0=CPSR; 1=SPSR */
-		r[rd] = psr ? spsr : std::bit_cast<u32, CPSR>(cpsr);
+		r[rd] = psr ? spsr : std::bit_cast<u32, CPSR>(cpsr); /* TODO: read from spsr in user/system modes? */
 	}
 
 
 	void MSR(u32 opcode) /* MSR */
 	{
-		bool dst_psr = opcode >> 22 & 1; /* 0=CPSR; 1=SPSR */
+		bool psr = opcode >> 22 & 1; /* 0=CPSR; 1=SPSR */
 		auto mode = cpsr.mode;
-		if (dst_psr == 1 && (mode == cpsr_mode_bits_user || mode == cpsr_mode_bits_system)) {
+		if (psr == 1 && (mode == cpsr_mode_bits_user || mode == cpsr_mode_bits_system)) {
 			return; /* User/System modes do not have a SPSR */
 		}
 
@@ -523,12 +536,12 @@ namespace CPU
 
 		u32 mask{};
 		if (mode == cpsr_mode_bits_user) {
-			mask |= 0xF0000000 * GetBit(opcode, 19); /* User mode can only change the flag bits */
-			if (dst_psr == 0) {
+			mask |= 0xF0000000 * GetBit(opcode, 19); /* User mode can only change the flag bits. TODO: bits 24-27? */
+			if (psr == 0) { /* cpsr */
 				u32 prev_cpsr = std::bit_cast<u32, CPSR>(cpsr);
 				cpsr = std::bit_cast<CPSR, u32>(oper & mask | prev_cpsr & ~mask);
 			}
-			else {
+			else { /* spsr */
 				spsr = oper & mask | spsr & ~mask;
 			}
 		}
@@ -537,8 +550,9 @@ namespace CPU
 			mask |= 0x00FF0000 * GetBit(opcode, 18);
 			mask |= 0x0000FF00 * GetBit(opcode, 17);
 			mask |= 0x000000FF * GetBit(opcode, 16);
-			if (dst_psr == 0) {
+			if (psr == 0) { /* cpsr */
 				if (mask & 0xFF) {
+					oper |= 0x10; /* bit 4 is forced to 1 */
 					switch (oper & 0x1F) {
 					case cpsr_mode_bits_user: SetMode<Mode::User>(); break;
 					case cpsr_mode_bits_fiq: SetMode<Mode::Fiq>(); break;
@@ -554,7 +568,7 @@ namespace CPU
 				u32 prev_cpsr = std::bit_cast<u32, CPSR>(cpsr);
 				cpsr = std::bit_cast<CPSR, u32>(oper & mask | prev_cpsr & ~mask);
 			}
-			else {
+			else { /* spsr */
 				spsr = oper & mask | spsr & ~mask;
 			}
 		}
