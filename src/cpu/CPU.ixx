@@ -76,10 +76,11 @@ namespace CPU
 	template<bool> void BlockDataTransfer(u32 opcode);
 	void Branch(u32 opcode);
 	void BranchAndExchange(u32 opcode);
+	void BranchAndLink(u32 opcode);
 	template<ArmDataProcessingInstruction> void DataProcessing(u32 opcode);
 	template<OffsetType> void HalfwordDataTransfer(u32 opcode);
-	void MRS(u32 opcode);
-	void MSR(u32 opcode);
+	template<bool> void MRS(u32 opcode);
+	template<bool> void MSR(u32 opcode);
 	void Multiply(u32 opcode);
 	void MultiplyLong(u32 opcode);
 	void SingleDataSwap(u32 opcode);

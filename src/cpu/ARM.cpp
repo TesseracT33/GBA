@@ -7,6 +7,8 @@ import Util.Bit;
 #define lr (r[14])
 #define pc (r[15])
 
+/* TODO: flush pipeline when r15 is used as a destination */
+
 namespace CPU
 {
 	template<bool pre_or_post /* 0 = post (add offset after transfer); 1 = pre (add offset before transfer) */ >
@@ -124,13 +126,9 @@ namespace CPU
 	}
 
 
-	void Branch(u32 opcode) /* B, BL */
+	void Branch(u32 opcode) /* B */
 	{
 		s32 offset = SignExtend<s32, 26>((opcode & 0xFF'FFFF) << 2);
-		bool link = opcode & 1 << 24;
-		if (link) {
-			lr = pc;
-		}
 		pc += offset;
 		FlushPipeline();
 	}
@@ -150,6 +148,15 @@ namespace CPU
 		}
 		FlushPipeline();
 		/* TODO: Switching to THUMB Mode: Set Bit 0 of the value in Rn to 1, program continues then at Rn-1 in THUMB mode. */
+	}
+
+
+	void BranchAndLink(u32 opcode) /* BL */
+	{
+		s32 offset = SignExtend<s32, 26>((opcode & 0xFF'FFFF) << 2);
+		lr = pc;
+		pc += offset;
+		FlushPipeline();
 	}
 
 
@@ -264,27 +271,28 @@ namespace CPU
 	}
 
 
-	void DecodeExecuteARM(const u32 opcode)
+	void DecodeExecuteARM(u32 opcode)
 	{
 		if (opcode & 1 << 27) {
 			switch (opcode >> 24 & 7) {
 			case 0b000:
+				BlockDataTransfer<0>(opcode);
+				break;
+
 			case 0b001:
-				opcode & 1 << 24
-					? BlockDataTransfer<1>(opcode)
-					: BlockDataTransfer<0>(opcode);
+				BlockDataTransfer<1>(opcode);
 				break;
 
 			case 0b010:
-			case 0b011:
 				Branch(opcode);
+				break;
+
+			case 0b011:
+				BranchAndLink(opcode);
 				break;
 
 			case 0b100:
 			case 0b101:
-				SignalException<Exception::UndefinedInstruction>();
-				break;
-
 			case 0b110:
 				SignalException<Exception::UndefinedInstruction>();
 				break;
@@ -292,89 +300,74 @@ namespace CPU
 			case 0b111:
 				SoftwareInterrupt();
 				break;
+
+			default:
+				std::unreachable();
 			}
 		}
+		else if (opcode & 1 << 26) {
+			SingleDataTransfer(opcode);
+		}
+		else if ((opcode & 0xFFF'FFF0) == 0x12F'FF10) {
+			BranchAndExchange(opcode);
+		}
+		else if ((opcode & 0xFB0'0FF0) == 0x100'0090) {
+			SingleDataSwap(opcode);
+		}
+		else if ((opcode & 0xFC0'00F0) == 0x90) {
+			Multiply(opcode);
+		}
+		else if ((opcode & 0xF80'00F0) == 0x80'0090) {
+			MultiplyLong(opcode);
+		}
+		else if ((opcode & 0xE40'0F90) == 0x90) {
+			HalfwordDataTransfer<OffsetType::Register>(opcode);
+		}
+		else if ((opcode & 0xE40'0090) == 0x40'0090) {
+			HalfwordDataTransfer<OffsetType::Immediate>(opcode);
+		}
 		else {
-			if (opcode & 1 << 26) {
-				(opcode & 0x6000010) == 0x6000010
-					? SignalException<Exception::UndefinedInstruction>()
-					: SingleDataTransfer(opcode);
-			}
-			else {
-				if ((opcode & 0xF2FFF10) == 0x12FFF10) {
-					BranchAndExchange(opcode);
-				}
-				else if ((opcode & 0xFB00FF0) == 0x1000090) {
-					SingleDataSwap(opcode);
-				}
-				else if ((opcode & 0xFC00090) == 0x90) {
-					Multiply(opcode);
-				}
-				else if ((opcode & 0xF800090) == 0x800090) {
-					MultiplyLong(opcode);
-				}
-				else if ((opcode & 0xF400F90) == 0x90) {
-					HalfwordDataTransfer<OffsetType::Register>(opcode);
-				}
-				else if ((opcode & 0xF400090) == 0x400090) {
-					HalfwordDataTransfer<OffsetType::Immediate>(opcode);
-				}
-				else {
-					using enum ArmDataProcessingInstruction;
-					switch (opcode >> 21 & 0xF) {
-					case 0b0000: DataProcessing<AND>(opcode); break;
-					case 0b0001: DataProcessing<EOR>(opcode); break;
-					case 0b0010: DataProcessing<SUB>(opcode); break;
-					case 0b0011: DataProcessing<RSB>(opcode); break;
-					case 0b0100: DataProcessing<ADD>(opcode); break;
-					case 0b0101: DataProcessing<ADC>(opcode); break;
-					case 0b0110: DataProcessing<SBC>(opcode); break;
-					case 0b0111: DataProcessing<RSC>(opcode); break;
-					case 0b1100: DataProcessing<ORR>(opcode); break;
-					case 0b1101: DataProcessing<MOV>(opcode); break;
-					case 0b1110: DataProcessing<BIC>(opcode); break;
-					case 0b1111: DataProcessing<MVN>(opcode); break;
+			using enum ArmDataProcessingInstruction;
+			switch (opcode >> 21 & 0xF) {
+			case 0b0000: DataProcessing<AND>(opcode); break;
+			case 0b0001: DataProcessing<EOR>(opcode); break;
+			case 0b0010: DataProcessing<SUB>(opcode); break;
+			case 0b0011: DataProcessing<RSB>(opcode); break;
+			case 0b0100: DataProcessing<ADD>(opcode); break;
+			case 0b0101: DataProcessing<ADC>(opcode); break;
+			case 0b0110: DataProcessing<SBC>(opcode); break;
+			case 0b0111: DataProcessing<RSC>(opcode); break;
+			case 0b1100: DataProcessing<ORR>(opcode); break;
+			case 0b1101: DataProcessing<MOV>(opcode); break;
+			case 0b1110: DataProcessing<BIC>(opcode); break;
+			case 0b1111: DataProcessing<MVN>(opcode); break;
 
-					case 0b1000: 
-						if ((opcode & 0xFBF0FFF) == 0x10F0000) {
-							MRS(opcode);
-						}
-						else {
-							DataProcessing<TST>(opcode);
-						}
-						break;
+			case 0b1000:
+				(opcode & 0xFFF'0FFF) == 0x10F'0000
+					? MRS<0>(opcode)
+					: DataProcessing<TST>(opcode);
+				break;
 
-					case 0b1010:
-						if ((opcode & 0xFBF0FFF) == 0x10F0000) {
-							MRS(opcode);
-						}
-						else {
-							DataProcessing<CMP>(opcode);
-						}
-						break;
+			case 0b1010:
+				(opcode & 0xFFF'0FFF) == 0x14F'0000
+					? MRS<1>(opcode)
+					: DataProcessing<CMP>(opcode);
+				break;
 
-					case 0b1001: 
-						if ((opcode & 0xFB0FFF0) == 0x120F000 || (opcode & 0xFB0F000) == 0x320F000) {
-							MSR(opcode);
-						}
-						else {
-							DataProcessing<TEQ>(opcode);
-						}
-						break;
+			case 0b1001:
+				(opcode & 0xFF0'FFF0) == 0x120'F000 || (opcode & 0xFF0'F000) == 0x320'F000
+					? MSR<0>(opcode)
+					: DataProcessing<TEQ>(opcode);
+				break;
 
-					case 0b1011: 
-						if ((opcode & 0xFBFFFF0) == 0x129F000 || (opcode & 0xFBFF000) == 0x329F000) {
-							MSR(opcode);
-						}
-						else {
-							DataProcessing<CMN>(opcode);
-						}
-						break;
+			case 0b1011:
+				(opcode & 0xFF0'FFF0) == 0x160'F000 || (opcode & 0xFF0'F000) == 0x360'F000
+					? MSR<1>(opcode)
+					: DataProcessing<CMN>(opcode);
+				break;
 
-					default: 
-						std::unreachable();
-					}
-				}
+			default:
+				std::unreachable();
 			}
 		}
 	}
@@ -497,7 +490,7 @@ namespace CPU
 			}
 			break;
 
-		default:
+		default: /* 0b00: Single Data Swap */
 			std::unreachable();
 		}
 		if (w) {
@@ -507,20 +500,27 @@ namespace CPU
 	}
 
 
+	template<bool psr /* 0=CPSR; 1=SPSR */ >
 	void MRS(u32 opcode) /* MRS */
 	{
 		auto rd = opcode >> 12 & 0xF;
-		bool psr = opcode >> 22 & 1; /* 0=CPSR; 1=SPSR */
-		r[rd] = psr ? spsr : std::bit_cast<u32, CPSR>(cpsr); /* TODO: read from spsr in user/system modes? */
+		if constexpr (psr == 0) {
+			r[rd] = std::bit_cast<u32, CPSR>(cpsr);
+		}
+		else {
+			r[rd] = spsr;  /* TODO: read from spsr in user/system modes? */
+		}
 	}
 
 
+	template<bool psr /* 0=CPSR; 1=SPSR */ >
 	void MSR(u32 opcode) /* MSR */
 	{
-		bool psr = opcode >> 22 & 1; /* 0=CPSR; 1=SPSR */
 		auto mode = cpsr.mode;
-		if (psr == 1 && (mode == cpsr_mode_bits_user || mode == cpsr_mode_bits_system)) {
-			return; /* User/System modes do not have a SPSR */
+		if constexpr (psr == 1) {
+			if (mode == cpsr_mode_bits_user || mode == cpsr_mode_bits_system) {
+				return; /* User/System modes do not have a SPSR */
+			}
 		}
 
 		bool imm_or_reg = opcode >> 25 & 1; /* 0=Register; 1=Immediate */
@@ -537,7 +537,7 @@ namespace CPU
 		u32 mask{};
 		if (mode == cpsr_mode_bits_user) {
 			mask |= 0xF0000000 * GetBit(opcode, 19); /* User mode can only change the flag bits. TODO: bits 24-27? */
-			if (psr == 0) { /* cpsr */
+			if constexpr (psr == 0) { /* cpsr */
 				u32 prev_cpsr = std::bit_cast<u32, CPSR>(cpsr);
 				cpsr = std::bit_cast<CPSR, u32>(oper & mask | prev_cpsr & ~mask);
 			}
@@ -550,7 +550,7 @@ namespace CPU
 			mask |= 0x00FF0000 * GetBit(opcode, 18);
 			mask |= 0x0000FF00 * GetBit(opcode, 17);
 			mask |= 0x000000FF * GetBit(opcode, 16);
-			if (psr == 0) { /* cpsr */
+			if constexpr (psr == 0) { /* cpsr */
 				if (mask & 0xFF) {
 					oper |= 0x10; /* bit 4 is forced to 1 */
 					switch (oper & 0x1F) {
