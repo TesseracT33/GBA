@@ -1,7 +1,6 @@
 module CPU;
 
 import Bus;
-import Util.Bit;
 
 #define sp (r[13])
 #define lr (r[14])
@@ -134,7 +133,7 @@ namespace CPU
 				if (shift_amount == 0) {
 					/* LSR#0: Interpreted as LSR#32, ie. Rd becomes zero, C becomes Bit 31 of Rs */
 					cpsr.carry = GetBit(r[rs], 31);
-					return 0;
+					return 0u;
 				}
 				else {
 					cpsr.carry = GetBit(r[rs], shift_amount - 1);
@@ -149,7 +148,7 @@ namespace CPU
 				}
 				else {
 					cpsr.carry = GetBit(r[rs], shift_amount - 1);
-					return s32(r[rs]) >> shift_amount;
+					return u32(s32(r[rs]) >> shift_amount);
 				}
 
 			case 0b11: /* ADD/SUB; already covered by other function */

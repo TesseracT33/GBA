@@ -58,5 +58,32 @@
     <ClCompile Include="src\Main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="external\EmuUtils\src\Bit.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="external\EmuUtils\src\Files.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="external\EmuUtils\src\Host.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="external\EmuUtils\src\Misc.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="external\EmuUtils\src\NumericalTypes.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="external\EmuUtils\src\SerializationStream.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="external\EmuUtils\src\SSE.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="external\EmuUtils\src\SSE.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="external\EmuUtils\src\Util.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

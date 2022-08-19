@@ -66,7 +66,7 @@ namespace CPU
 
 	void FlushPipeline()
 	{
-		pipeline.opcode_index = pipeline.step = 0;
+		pipeline.index = pipeline.step = 0;
 	}
 
 
@@ -82,7 +82,7 @@ namespace CPU
 		r13_irq = r14_irq = 0;
 		r13_und = r14_und = 0;
 		spsr = spsr_fiq = spsr_svc = spsr_abt = spsr_irq = spsr_und = 0;
-		SetMode<Mode::User>();
+		SetMode<Mode::System>();
 		execution_state = ExecutionState::ARM;
 	}
 
@@ -232,14 +232,14 @@ namespace CPU
 	void StepPipeline()
 	{
 		if (pipeline.step >= 2) {
-			auto executing_opcode = pipeline.opcode[pipeline.opcode_index];
-			DecodeExecute(executing_opcode);
-			pipeline.opcode[pipeline.opcode_index] = Fetch();
-			pipeline.opcode_index ^= 1;
+			auto opcode = pipeline.opcode[pipeline.index];
+			DecodeExecute(opcode);
+			pipeline.opcode[pipeline.index] = Fetch();
+			pipeline.index ^= 1;
 		}
 		else {
-			pipeline.opcode[pipeline.opcode_index] = Fetch();
-			pipeline.opcode_index ^= 1;
+			pipeline.opcode[pipeline.index] = Fetch();
+			pipeline.index ^= 1;
 			pipeline.step++;
 		}
 	}

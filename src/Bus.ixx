@@ -1,6 +1,6 @@
 export module Bus;
 
-import NumericalTypes;
+import Util;
 
 import <array>;
 import <bit>;
@@ -57,4 +57,10 @@ namespace Bus
 		BLDALPHA = 0x52,
 		BLDY = 0x54
 	};
+
+	template<std::integral Int>
+	Int ReadOpenBus(u32 addr);
+
+	std::array<u8, 0x40000> board_wram;
+	std::array<u8, 0x8000> chip_wram;
 }

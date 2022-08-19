@@ -1,9 +1,6 @@
 export module CPU;
 
-import NumericalTypes;
-import SerializationStream;
 import Util;
-import Util.Bit;
 
 import <algorithm>;
 import <array>;
@@ -130,7 +127,7 @@ namespace CPU
 	struct Pipeline
 	{
 		std::array<u32, 2> opcode;
-		uint opcode_index;
+		uint index;
 		uint step;
 	} pipeline;
 

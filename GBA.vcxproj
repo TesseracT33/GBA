@@ -136,6 +136,15 @@
     <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="external\EmuUtils\src\Bit.ixx" />
+    <ClCompile Include="external\EmuUtils\src\Files.ixx" />
+    <ClCompile Include="external\EmuUtils\src\Host.ixx" />
+    <ClCompile Include="external\EmuUtils\src\Misc.ixx" />
+    <ClCompile Include="external\EmuUtils\src\NumericalTypes.ixx" />
+    <ClCompile Include="external\EmuUtils\src\SerializationStream.ixx" />
+    <ClCompile Include="external\EmuUtils\src\SSE.cpp" />
+    <ClCompile Include="external\EmuUtils\src\SSE.ixx" />
+    <ClCompile Include="external\EmuUtils\src\Util.ixx" />
     <ClCompile Include="src\Bios.ixx" />
     <ClCompile Include="src\Bus.cpp" />
     <ClCompile Include="src\Bus.ixx" />

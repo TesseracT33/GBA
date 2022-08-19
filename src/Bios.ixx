@@ -1,6 +1,6 @@
 export module Bios;
 
-import NumericalTypes;
+import Util;
 
 import <array>;
 

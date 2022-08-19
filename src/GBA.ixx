@@ -2,8 +2,7 @@ export module GBA;
 
 import PPU;
 
-import NumericalTypes;
-import SerializationStream;
+import Util;
 
 import <string>;
 

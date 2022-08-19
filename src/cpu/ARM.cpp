@@ -1,7 +1,6 @@
 module CPU;
 
 import Bus;
-import Util.Bit;
 
 #define sp (r[13])
 #define lr (r[14])

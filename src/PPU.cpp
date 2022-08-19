@@ -1,7 +1,5 @@
 module PPU;
 
-import Util.Bit;
-
 namespace PPU
 {
 	RGB AlphaBlend(RGB target_1, RGB target_2)
