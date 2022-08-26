@@ -82,7 +82,7 @@ namespace CPU
 		r13_irq = r14_irq = 0;
 		r13_und = r14_und = 0;
 		spsr = spsr_fiq = spsr_svc = spsr_abt = spsr_irq = spsr_und = 0;
-		SetMode<Mode::System>();
+		cpsr = std::bit_cast<CPSR>(cpsr_mode_bits_system);
 		execution_state = ExecutionState::ARM;
 	}
 
@@ -91,7 +91,7 @@ namespace CPU
 	{
 		for (uint cycle = 0; cycle < 1000 /* TODO */; ++cycle) {
 			StepPipeline();
-			PPU::Step();
+			//PPU::Step();
 		}
 	}
 

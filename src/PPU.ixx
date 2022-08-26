@@ -6,6 +6,7 @@ import <algorithm>;
 import <array>;
 import <bit>;
 import <cmath>;
+import <concepts>;
 import <cstring>;
 import <vector>;
 
@@ -14,9 +15,9 @@ namespace PPU
 	export
 	{
 		void Initialize();
-		u8 ReadOam(u32 addr);
-		u8 ReadPaletteRam(u32 addr);
-		u8 ReadVram(u32 addr);
+		template<std::integral Int> Int ReadOam(u32 addr);
+		template<std::integral Int> Int ReadPaletteRam(u32 addr);
+		template<std::integral Int> Int ReadVram(u32 addr);
 		void Step();
 		void StreamState(SerializationStream& stream);
 		void WriteOam(u32 addr);
@@ -63,7 +64,6 @@ namespace PPU
 	void BlendBackgrounds();
 	RGB BrightnessDecrease(RGB pixel);
 	RGB BrightnessIncrease(RGB pixel);
-	u8 GetObjectHeight(ObjectData obj_data);
 	u8 GetObjectWidth(ObjectData obj_data);
 	void PushPixel(ColorData color_data);
 	void PushPixel(RGB rgb);
@@ -238,13 +238,6 @@ namespace PPU
 		16, 32, 8, 16,
 		32, 32, 16, 32,
 		64, 64, 32, 64
-	};
-
-	constexpr u8 size_y[4][4] = {
-				8, 8, 16, 8,
-				16, 8, 32, 16,
-				32, 16, 32, 32,
-				64, 32, 64, 64
 	};
 
 	bool green_swap;

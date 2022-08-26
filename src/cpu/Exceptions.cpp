@@ -23,7 +23,7 @@ namespace CPU
 	{
 		r14_abt = pc;
 		pc = exception_vector_data_abort;
-		spsr_abt = std::bit_cast<u32, CPSR>(cpsr);
+		spsr_abt = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
 		SetMode<Mode::Abort>();
@@ -34,7 +34,7 @@ namespace CPU
 	{
 		r14_fiq = pc;
 		pc = exception_vector_fiq;
-		spsr_fiq = std::bit_cast<u32, CPSR>(cpsr);
+		spsr_fiq = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = cpsr.fiq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
 		SetMode<Mode::Fiq>();
@@ -45,7 +45,7 @@ namespace CPU
 	{
 		r14_irq = pc;
 		pc = exception_vector_irq;
-		spsr_irq = std::bit_cast<u32, CPSR>(cpsr);
+		spsr_irq = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
 		SetMode<Mode::Irq>();
@@ -56,7 +56,7 @@ namespace CPU
 	{
 		r14_abt = pc;
 		pc = exception_vector_prefetch_abort;
-		spsr_abt = std::bit_cast<u32, CPSR>(cpsr);
+		spsr_abt = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
 		SetMode<Mode::Abort>();
@@ -67,7 +67,7 @@ namespace CPU
 	{
 		r14_svc = pc;
 		pc = exception_vector_reset;
-		spsr_svc = std::bit_cast<u32, CPSR>(cpsr);
+		spsr_svc = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = cpsr.fiq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
 		SetMode<Mode::Supervisor>();
@@ -78,7 +78,7 @@ namespace CPU
 	{
 		r14_svc = pc;
 		pc = exception_vector_software_int;
-		spsr_svc = std::bit_cast<u32, CPSR>(cpsr);
+		spsr_svc = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
 		SetMode<Mode::Supervisor>();
@@ -89,7 +89,7 @@ namespace CPU
 	{
 		r14_und = pc;
 		pc = exception_vector_undefined_instr;
-		spsr_und = std::bit_cast<u32, CPSR>(cpsr);
+		spsr_und = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
 		SetMode<Mode::Undefined>();

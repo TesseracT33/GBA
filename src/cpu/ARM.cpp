@@ -90,7 +90,7 @@ namespace CPU
 							r[i] = LoadReg();
 						}
 					}
-					cpsr = std::bit_cast<CPSR, u32>(spsr);
+					cpsr = std::bit_cast<CPSR>(spsr);
 				}
 				else {
 					/* Transfer user registers */
@@ -255,7 +255,7 @@ namespace CPU
 					default: assert(false); break;
 					}
 					SetExecutionState(static_cast<ExecutionState>(GetBit(spsr, 5)));
-					cpsr = std::bit_cast<CPSR, u32>(spsr);
+					cpsr = std::bit_cast<CPSR>(spsr);
 				}
 			}
 			else {
@@ -504,7 +504,7 @@ namespace CPU
 	{
 		auto rd = opcode >> 12 & 0xF;
 		if constexpr (psr == 0) {
-			r[rd] = std::bit_cast<u32, CPSR>(cpsr);
+			r[rd] = std::bit_cast<u32>(cpsr);
 		}
 		else {
 			r[rd] = spsr;  /* TODO: read from spsr in user/system modes? */
@@ -537,8 +537,8 @@ namespace CPU
 		if (mode == cpsr_mode_bits_user) {
 			mask |= 0xF0000000 * GetBit(opcode, 19); /* User mode can only change the flag bits. TODO: bits 24-27? */
 			if constexpr (psr == 0) { /* cpsr */
-				u32 prev_cpsr = std::bit_cast<u32, CPSR>(cpsr);
-				cpsr = std::bit_cast<CPSR, u32>(oper & mask | prev_cpsr & ~mask);
+				u32 prev_cpsr = std::bit_cast<u32>(cpsr);
+				cpsr = std::bit_cast<CPSR>(oper & mask | prev_cpsr & ~mask);
 			}
 			else { /* spsr */
 				spsr = oper & mask | spsr & ~mask;
@@ -564,8 +564,8 @@ namespace CPU
 					}
 					SetExecutionState(static_cast<ExecutionState>(GetBit(oper, 5)));
 				}
-				u32 prev_cpsr = std::bit_cast<u32, CPSR>(cpsr);
-				cpsr = std::bit_cast<CPSR, u32>(oper & mask | prev_cpsr & ~mask);
+				u32 prev_cpsr = std::bit_cast<u32>(cpsr);
+				cpsr = std::bit_cast<CPSR>(oper & mask | prev_cpsr & ~mask);
 			}
 			else { /* spsr */
 				spsr = oper & mask | spsr & ~mask;

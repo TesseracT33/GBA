@@ -48,7 +48,7 @@ namespace PPU
 			int topmost_layer = layer;
 			RGB rgb = bg_color_data_begin_ptrs[topmost_layer][dot].ToRGB();
 			if (bldcnt.color_special_effect != 0) {
-				u16 bldcnt_u16 = std::bit_cast<u16, decltype(bldcnt)>(bldcnt);
+				u16 bldcnt_u16 = std::bit_cast<u16>(bldcnt);
 				switch (bldcnt.color_special_effect) {
 				case 1: /* Alpha Blending (1st+2nd Target mixed) */
 					if (bldcnt_u16 & (1 << topmost_layer | 1 << (topmost_layer + 8))) {
@@ -114,13 +114,6 @@ namespace PPU
 	}
 
 
-	u8 GetObjectHeight(ObjectData obj_data)
-	{
-		return (1 + obj_data.double_size_obj_disable) *
-			size_y[obj_data.obj_size][obj_data.obj_shape];
-	}
-
-
 	u8 GetObjectWidth(ObjectData obj_data)
 	{
 		return (1 + obj_data.double_size_obj_disable) *
@@ -130,9 +123,9 @@ namespace PPU
 
 	void Initialize()
 	{
-		objects.resize(sizeof(ObjectData) * max_objects);
-		Scanline();
-		UpdateRotateScalingRegisters();
+		//objects.resize(sizeof(ObjectData) * max_objects);
+		//Scanline();
+		//UpdateRotateScalingRegisters();
 	}
 
 
@@ -160,7 +153,8 @@ namespace PPU
 	}
 
 
-	u8 ReadOam(u32 addr)
+	template<std::integral Int>
+	Int ReadOam(u32 addr)
 	{
 		if ((in_hblank && dispcnt.hblank_interval_free) || in_vblank || dispcnt.forced_blank) {
 			addr &= 0x3FF;
@@ -172,7 +166,8 @@ namespace PPU
 	}
 
 
-	u8 ReadPaletteRam(u32 addr)
+	template<std::integral Int>
+	Int ReadPaletteRam(u32 addr)
 	{
 		if (in_hblank || in_vblank || dispcnt.forced_blank) {
 			return palette_ram[addr & 0x3FF];
@@ -183,7 +178,8 @@ namespace PPU
 	}
 
 
-	u8 ReadVram(u32 addr)
+	template<std::integral Int>
+	Int ReadVram(u32 addr)
 	{
 		if (in_hblank || in_vblank || dispcnt.forced_blank) {
 			return vram[addr & 0x17FFF];
@@ -353,7 +349,7 @@ namespace PPU
 					u16 col = palette_ram[palette_number] | palette_ram[palette_number + 1] << 8;
 					col &= 0x7FFF;
 					col |= (palette_number == 0) << 15;
-					current_scanline_bg_layers[bg][dot++] = std::bit_cast<ColorData, u16>(col);
+					current_scanline_bg_layers[bg][dot++] = std::bit_cast<ColorData>(col);
 				};
 				if (flip_x) {
 					for (int i = 7 - pixels_to_ignore_right; i >= pixels_to_ignore_left; --i) {
@@ -445,22 +441,65 @@ namespace PPU
 
 	void ScanOam()
 	{
+		/* OBJ Attribute 0 (R/W)
+			  Bit   Expl.
+			  0-7   Y-Coordinate           (0-255)
+			  8     Rotation/Scaling Flag  (0=Off, 1=On)
+			  When Rotation/Scaling used (Attribute 0, bit 8 set):
+				9     Double-Size Flag     (0=Normal, 1=Double)
+			  When Rotation/Scaling not used (Attribute 0, bit 8 cleared):
+				9     OBJ Disable          (0=Normal, 1=Not displayed)
+			  10-11 OBJ Mode  (0=Normal, 1=Semi-Transparent, 2=OBJ Window, 3=Prohibited)
+			  12    OBJ Mosaic             (0=Off, 1=On)
+			  13    Colors/Palettes        (0=16/16, 1=256/1)
+			  14-15 OBJ Shape              (0=Square,1=Horizontal,2=Vertical,3=Prohibited)
+
+			OBJ Attribute 1 (R/W)
+			  Bit   Expl.
+			  0-8   X-Coordinate           (0-511)
+			  When Rotation/Scaling used (Attribute 0, bit 8 set):
+				9-13  Rotation/Scaling Parameter Selection (0-31)
+					  (Selects one of the 32 Rotation/Scaling Parameters that
+					  can be defined in OAM, for details read next chapter.)
+			  When Rotation/Scaling not used (Attribute 0, bit 8 cleared):
+				9-11  Not used
+				12    Horizontal Flip      (0=Normal, 1=Mirrored)
+				13    Vertical Flip        (0=Normal, 1=Mirrored)
+			  14-15 OBJ Size               (0..3, depends on OBJ Shape, see Attr 0)
+					  Size  Square   Horizontal  Vertical
+					  0     8x8      16x8        8x16
+					  1     16x16    32x8        8x32
+					  2     32x32    32x16       16x32
+					  3     64x64    64x32       32x64
+
+			OBJ Attribute 2 (R/W)
+			  Bit   Expl.
+			  0-9   Character Name          (0-1023=Tile Number)
+			  10-11 Priority relative to BG (0-3; 0=Highest)
+			  12-15 Palette Number   (0-15) (Not used in 256 color/1 palette mode)
+		*/
 		for (uint oam_addr = 0; oam_addr < oam.size(); oam_addr += 8) {
 			bool rotate_scale = oam[oam_addr + 1] & 1;
-			if (!rotate_scale) {
-				bool obj_disable = oam[oam_addr + 1] & 2;
-				if (obj_disable) {
-					continue;
-				}
+			bool double_size_obj_disable = oam[oam_addr + 1] & 2;
+			if (!rotate_scale && double_size_obj_disable) {
+				continue;
 			}
 			u8 y_coord = oam[oam_addr] & 0xFF;
 			if (y_coord <= ly) {
-				//u8 obj_height = GetObjectHeight();
-				//if (y_coord + obj_height > ly) {
-				//	ObjectData obj_data;
-				//	std::memcpy(&obj_data, oam.data() + oam_addr, 3);
-				//	objects.push_back(obj_data);
-				//}
+				u8 obj_shape = oam[oam_addr + 1] >> 6 & 3;
+				u8 obj_size = oam[oam_addr + 5] >> 6 & 3;
+				static constexpr u8 obj_size_y[4][4] = {
+					8, 8, 16, 8,
+					16, 8, 32, 16,
+					32, 16, 32, 32,
+					64, 32, 64, 64
+				};
+				u8 obj_height = (1 + double_size_obj_disable) * obj_size_y[obj_size][obj_shape];
+				if (y_coord + obj_height > ly) {
+					ObjectData obj_data;
+					std::memcpy(&obj_data, oam.data() + oam_addr, 6);
+					objects.push_back(obj_data);
+				}
 			}
 		}
 	}
@@ -547,4 +586,24 @@ namespace PPU
 	{
 
 	}
+
+
+	template s8 ReadOam<s8>(u32);
+	template u8 ReadOam<u8>(u32);
+	template s16 ReadOam<s16>(u32);
+	template u16 ReadOam<u16>(u32);
+	template s32 ReadOam<s32>(u32);
+	template u32 ReadOam<u32>(u32);
+	template s8 ReadPaletteRam<s8>(u32);
+	template u8 ReadPaletteRam<u8>(u32);
+	template s16 ReadPaletteRam<s16>(u32);
+	template u16 ReadPaletteRam<u16>(u32);
+	template s32 ReadPaletteRam<s32>(u32);
+	template u32 ReadPaletteRam<u32>(u32);
+	template s8 ReadVram<s8>(u32);
+	template u8 ReadVram<u8>(u32);
+	template s16 ReadVram<s16>(u32);
+	template u16 ReadVram<u16>(u32);
+	template s32 ReadVram<s32>(u32);
+	template u32 ReadVram<u32>(u32);
 }
