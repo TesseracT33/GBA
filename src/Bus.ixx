@@ -58,8 +58,10 @@ namespace Bus
 		BLDY = 0x54
 	};
 
-	template<std::integral Int>
-	Int ReadOpenBus(u32 addr);
+	template<std::integral Int> Int ReadIO(u32 addr);
+	template<std::integral Int> void WriteIO(u32 addr, Int data);
+
+	template<std::integral Int> Int ReadOpenBus(u32 addr);
 
 	std::array<u8, 0x40000> board_wram;
 	std::array<u8, 0x8000> chip_wram;

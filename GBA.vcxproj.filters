@@ -20,6 +20,7 @@
     <None Include=".gitignore" />
     <None Include=".gitattributes" />
     <None Include=".editorconfig" />
+    <None Include=".gitmodules" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\PPU.ixx">
@@ -83,6 +84,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="external\EmuUtils\src\Util.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cartridge.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cartridge.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

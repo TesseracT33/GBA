@@ -20,9 +20,9 @@ namespace PPU
 		template<std::integral Int> Int ReadVram(u32 addr);
 		void Step();
 		void StreamState(SerializationStream& stream);
-		void WriteOam(u32 addr);
-		void WritePaletteRam(u32 addr);
-		void WriteVram(u32 addr);
+		template<std::integral Int> void WriteOam(u32 addr, Int data);
+		template<std::integral Int> void WritePaletteRam(u32 addr, Int data);
+		template<std::integral Int> void WriteVram(u32 addr, Int data);
 	}
 
 	struct RGB
@@ -263,4 +263,62 @@ namespace PPU
 
 	std::vector<u8> framebuffer;
 	std::vector<ObjectData> objects;
+
+	///////////// template definitions /////////////
+	template<std::integral Int>
+	Int ReadOam(u32 addr)
+	{
+		if ((in_hblank && dispcnt.hblank_interval_free) || in_vblank || dispcnt.forced_blank) {
+			addr &= 0x3FF;
+			return oam[addr & 0x3FF];
+		}
+		else {
+			return 0xFF;
+		}
+	}
+
+
+	template<std::integral Int>
+	Int ReadPaletteRam(u32 addr)
+	{
+		if (in_hblank || in_vblank || dispcnt.forced_blank) {
+			return palette_ram[addr & 0x3FF];
+		}
+		else {
+			return 0xFF;
+		}
+	}
+
+
+	template<std::integral Int>
+	Int ReadVram(u32 addr)
+	{
+		if (in_hblank || in_vblank || dispcnt.forced_blank) {
+			return vram[addr & 0x17FFF];
+		}
+		else {
+			return 0xFF;
+		}
+	}
+
+
+	template<std::integral Int>
+	void WriteOam(u32 addr, Int data)
+	{
+
+	}
+
+
+	template<std::integral Int>
+	void WritePaletteRam(u32 addr, Int data)
+	{
+
+	}
+
+
+	template<std::integral Int>
+	void WriteVram(u32 addr, Int data)
+	{
+
+	}
 }

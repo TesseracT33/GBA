@@ -132,6 +132,7 @@
     <None Include=".editorconfig" />
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
+    <None Include=".gitmodules" />
     <None Include="LICENSE" />
     <None Include="README.md" />
   </ItemGroup>
@@ -148,6 +149,8 @@
     <ClCompile Include="src\Bios.ixx" />
     <ClCompile Include="src\Bus.cpp" />
     <ClCompile Include="src\Bus.ixx" />
+    <ClCompile Include="src\Cartridge.cpp" />
+    <ClCompile Include="src\Cartridge.ixx" />
     <ClCompile Include="src\cpu\ARM.cpp" />
     <ClCompile Include="src\cpu\CPU.cpp" />
     <ClCompile Include="src\cpu\CPU.ixx" />

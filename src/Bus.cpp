@@ -1,5 +1,9 @@
 module Bus;
 
+import Bios;
+import Cartridge;
+import PPU;
+
 namespace Bus
 {
 	template<std::integral Int>
@@ -20,13 +24,86 @@ namespace Bus
 		*/
 
 		if constexpr (sizeof(Int) == 2) {
-
+			addr &= ~1; /* TODO: correct? */
 		}
 		if constexpr (sizeof(Int) == 4) {
-
+			addr &= ~3;
 		}
+
+		if (addr & 0xF000'0000) { /* 1000'0000-FFFF'FFFF   Not used (upper 4bits of address bus unused) */
+			return ReadOpenBus<Int>(addr);
+		}
+
+		switch (addr >> 24 & 0xF) {
+		case 0x0: /* 0000'0000-0000'3FFF   BIOS - System ROM */
+			if (addr <= 0x3FFF) {
+				Int ret;
+				std::memcpy(&ret, bios.data() + addr, sizeof(Int));
+				return ret;
+			}
+			else {
+				return ReadOpenBus<Int>(addr);
+			}
+
+		case 0x1: /* not used */
+			return ReadOpenBus<Int>(addr);
+
+		case 0x2: { /* 0200'0000-0203'FFFF   WRAM - On-board Work RAM */
+			Int ret;
+			std::memcpy(&ret, board_wram.data() + (addr & 0x3FFFF), sizeof(Int));
+			return ret;
+		}
+
+		case 0x3: { /* 0300'0000-0300'7FFF   WRAM - On-chip Work RAM */
+			Int ret;
+			std::memcpy(&ret, chip_wram.data() + (addr & 0x7FFF), sizeof(Int));
+			return ret;
+		}
+
+		case 0x4: /* 0400'0000-0400'03FE   I/O Registers */
+			return ReadIO<Int>(addr);
+
+		case 0x5: /* 0500'0000-0500'03FF   BG/OBJ Palette RAM */
+			return PPU::ReadPaletteRam<Int>(addr);
+
+		case 0x6: /* 0600'0000-0601'7FFF   VRAM - Video RAM */
+			return PPU::ReadVram<Int>(addr);
+
+		case 0x7: /* 0700'0000-0700'03FF   OAM - OBJ Attributes */
+			return PPU::ReadOam<Int>(addr);
+
+		case 0x8: /* 0800'0000-09FF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 0 */
+		case 0x9:
+		case 0xA: /* 0A00'0000-0BFF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 1 */
+		case 0xB:
+		case 0xC: /* 0C00'0000-0DFF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 2 */
+		case 0xD:
+			return Cartridge::ReadRom<Int>(addr);
+
+		case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
+		case 0xF:
+			return Cartridge::ReadRam<Int>(addr);
+
+		default:
+			std::unreachable();
+		}
+	}
+
+
+
+	template<std::integral Int>
+	Int ReadIO(u32 addr)
+	{
 		return 0;
 	}
+
+
+	template<std::integral Int>
+	Int ReadOpenBus(u32 addr)
+	{
+		return 0;
+	}
+
 
 	template<std::integral Int>
 	void Write(u32 addr, Int data)
@@ -45,15 +122,56 @@ namespace Bus
 		register being stored always appears on data bus output 31.
 		*/
 
-		if constexpr (sizeof(Int) == 1) {
-			addr &= ~3;
+		if (addr & 0xF000'0000) { /* 1000'0000-FFFF'FFFF   Not used (upper 4bits of address bus unused) */
+			return;
 		}
 		if constexpr (sizeof(Int) == 2) {
-
+			addr &= ~1;
 		}
 		if constexpr (sizeof(Int) == 4) {
 			addr &= ~3;
 		}
+
+		switch (addr >> 24 & 0xF) {
+		case 0x2: /* 0200'0000-0203'FFFF   WRAM - On-board Work RAM */
+			std::memcpy(board_wram.data() + (addr & 0x3FFFF), &data, sizeof(Int));
+			break;
+
+		case 0x3: /* 0300'0000-0300'7FFF   WRAM - On-chip Work RAM */
+			std::memcpy(chip_wram.data() + (addr & 0x7FFF), &data, sizeof(Int));
+			break;
+
+		case 0x4: /* 0400'0000-0400'03FE   I/O Registers */
+			WriteIO<Int>(addr, data);
+			break;
+
+		case 0x5: /* 0500'0000-0500'03FF   BG/OBJ Palette RAM */
+			PPU::WritePaletteRam<Int>(addr, data);
+			break;
+
+		case 0x6: /* 0600'0000-0601'7FFF   VRAM - Video RAM */
+			PPU::WriteVram<Int>(addr, data);
+			break;
+
+		case 0x7: /* 0700'0000-0700'03FF   OAM - OBJ Attributes */
+			PPU::WriteOam<Int>(addr, data);
+			break;
+
+		case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
+		case 0xF:
+			Cartridge::WriteRam<Int>(addr, data);
+			break;
+
+		default:
+			break;
+		}
+	}
+
+
+	template<std::integral Int>
+	void WriteIO(u32 addr, Int data)
+	{
+
 	}
 
 

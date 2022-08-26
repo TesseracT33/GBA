@@ -153,43 +153,6 @@ namespace PPU
 	}
 
 
-	template<std::integral Int>
-	Int ReadOam(u32 addr)
-	{
-		if ((in_hblank && dispcnt.hblank_interval_free) || in_vblank || dispcnt.forced_blank) {
-			addr &= 0x3FF;
-			return oam[addr & 0x3FF];
-		}
-		else {
-			return 0xFF;
-		}
-	}
-
-
-	template<std::integral Int>
-	Int ReadPaletteRam(u32 addr)
-	{
-		if (in_hblank || in_vblank || dispcnt.forced_blank) {
-			return palette_ram[addr & 0x3FF];
-		}
-		else {
-			return 0xFF;
-		}
-	}
-
-
-	template<std::integral Int>
-	Int ReadVram(u32 addr)
-	{
-		if (in_hblank || in_vblank || dispcnt.forced_blank) {
-			return vram[addr & 0x17FFF];
-		}
-		else {
-			return 0xFF;
-		}
-	}
-
-
 	void Scanline()
 	{
 		if (dispcnt.forced_blank) {
@@ -568,42 +531,4 @@ namespace PPU
 		//s16 dmy = 0;
 		//bg_rot_coord_y = (bg_rot_coord_y + dmy) & 0x0FFF'FFF;
 	}
-
-
-	void WriteOam(u32 addr)
-	{
-
-	}
-
-
-	void WritePaletteRam(u32 addr)
-	{
-
-	}
-
-
-	void WriteVram(u32 addr)
-	{
-
-	}
-
-
-	template s8 ReadOam<s8>(u32);
-	template u8 ReadOam<u8>(u32);
-	template s16 ReadOam<s16>(u32);
-	template u16 ReadOam<u16>(u32);
-	template s32 ReadOam<s32>(u32);
-	template u32 ReadOam<u32>(u32);
-	template s8 ReadPaletteRam<s8>(u32);
-	template u8 ReadPaletteRam<u8>(u32);
-	template s16 ReadPaletteRam<s16>(u32);
-	template u16 ReadPaletteRam<u16>(u32);
-	template s32 ReadPaletteRam<s32>(u32);
-	template u32 ReadPaletteRam<u32>(u32);
-	template s8 ReadVram<s8>(u32);
-	template u8 ReadVram<u8>(u32);
-	template s16 ReadVram<s16>(u32);
-	template u16 ReadVram<u16>(u32);
-	template s32 ReadVram<s32>(u32);
-	template u32 ReadVram<u32>(u32);
 }
