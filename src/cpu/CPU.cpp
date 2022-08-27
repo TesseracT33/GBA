@@ -106,15 +106,12 @@ namespace CPU
 	}
 
 
-	void SetIrqHigh()
+	void SetIRQ(bool new_irq)
 	{
-
-	}
-
-
-	void SetIrqLow()
-	{
-
+		if (!irq && new_irq && !cpsr.irq_disable) {
+			SignalException<Exception::Irq>();
+		}
+		irq = new_irq;
 	}
 
 

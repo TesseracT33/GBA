@@ -18,8 +18,7 @@ namespace CPU
 	{
 		void Initialize();
 		void Run();
-		void SetIrqHigh();
-		void SetIrqLow();
+		void SetIRQ(bool new_irq);
 		void StreamState(SerializationStream& stream);
 	}
 
@@ -143,7 +142,9 @@ namespace CPU
 		u32 zero : 1;
 		u32 negative : 1;
 	} cpsr;
-	
+
+	bool irq;
+
 	std::array<u32, 5> r8_r12_non_fiq; /* R8-R12 */
 	std::array<u32, 5> r8_r12_fiq; /* R8-R12 */
 	u32 r13_usr, r14_usr; /* also system */

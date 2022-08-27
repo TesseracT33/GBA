@@ -1,7 +1,15 @@
 module Keypad;
 
+import IRQ;
+
 namespace Keypad
 {
+	void Initialize()
+	{
+		keyinput = keycnt = 0;
+	}
+
+
 	void NotifyButtonPressed(uint index)
 	{
 		keyinput |= 1 << index;
@@ -12,7 +20,12 @@ namespace Keypad
 	void NotifyButtonReleased(uint index)
 	{
 		keyinput &= ~(1 << index);
-		UpdateIrq();
+	}
+
+
+	void StreamState(SerializationStream& stream)
+	{
+
 	}
 
 
@@ -23,18 +36,12 @@ namespace Keypad
 		if (keycnt & irq_enable_mask) {
 			if (keycnt & irq_cond_mask) { /* logical AND mode */
 				if ((keyinput & keycnt & 0x3FF) == keycnt) {
-					/* TODO */
-				}
-				else {
-
+					IRQ::Raise(IRQ::Source::Keypad);
 				}
 			}
 			else { /* logical OR mode */
 				if (keyinput & keycnt & 0x3FF) {
-
-				}
-				else {
-
+					IRQ::Raise(IRQ::Source::Keypad);
 				}
 			}
 		}
