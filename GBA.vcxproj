@@ -159,6 +159,8 @@
     <ClCompile Include="src\DMA.cpp" />
     <ClCompile Include="src\DMA.ixx" />
     <ClCompile Include="src\GBA.ixx" />
+    <ClCompile Include="src\Keypad.cpp" />
+    <ClCompile Include="src\Keypad.ixx" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\PPU.cpp" />
     <ClCompile Include="src\PPU.ixx" />
