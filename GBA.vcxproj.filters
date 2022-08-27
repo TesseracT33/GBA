@@ -98,5 +98,11 @@
     <ClCompile Include="src\Timers.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\DMA.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\DMA.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
