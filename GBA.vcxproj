@@ -160,6 +160,8 @@
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\PPU.cpp" />
     <ClCompile Include="src\PPU.ixx" />
+    <ClCompile Include="src\Timers.cpp" />
+    <ClCompile Include="src\Timers.ixx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
