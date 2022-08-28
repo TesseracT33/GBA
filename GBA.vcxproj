@@ -146,6 +146,8 @@
     <ClCompile Include="external\EmuUtils\src\SSE.cpp" />
     <ClCompile Include="external\EmuUtils\src\SSE.ixx" />
     <ClCompile Include="external\EmuUtils\src\Util.ixx" />
+    <ClCompile Include="src\APU.cpp" />
+    <ClCompile Include="src\APU.ixx" />
     <ClCompile Include="src\Bios.ixx" />
     <ClCompile Include="src\Bus.cpp" />
     <ClCompile Include="src\Bus.ixx" />

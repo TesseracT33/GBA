@@ -1,27 +1,27 @@
 module Bus;
 
+import APU;
 import Bios;
 import Cartridge;
+import DMA;
+import Keypad;
+import IRQ;
 import PPU;
+import Timers;
 
 namespace Bus
 {
+	void Initialize()
+	{
+		board_wram.fill(0);
+		chip_wram.fill(0);
+	}
+
+
 	template<std::integral Int>
 	Int Read(u32 addr)
 	{
 		static_assert(sizeof(Int) == 1 || sizeof(Int) == 2 || sizeof(Int) == 4);
-		/* A byte load expects the data on data bus inputs 7 through 0 if the supplied
-		address is on a word boundary, on data bus inputs 15 through 8 if it is a word address
-		plus one byte, and so on. The selected byte is placed in the bottom 8 bits of the
-		destination register, and the remaining bits of the register are filled with zeros.
-
-		A word load will normally use a word aligned address. However, an address offset
-		from a word boundary will cause the data to be rotated into the register so that
-		the addressed byte occupies bits 0 to 7. This means that half-words accessed at
-		offsets 0 and 2 from the word boundary will be correctly loaded into bits 0 through 15
-		of the register. Two shift operations are then required to clear or to sign extend the
-		upper 16 bits.
-		*/
 
 		if constexpr (sizeof(Int) == 2) {
 			addr &= ~1; /* TODO: correct? */
@@ -61,7 +61,7 @@ namespace Bus
 		}
 
 		case 0x4: /* 0400'0000-0400'03FE   I/O Registers */
-			return ReadIO<Int>(addr);
+			return ReadIo<Int>(addr);
 
 		case 0x5: /* 0500'0000-0500'03FF   BG/OBJ Palette RAM */
 			return PPU::ReadPaletteRam<Int>(addr);
@@ -90,11 +90,35 @@ namespace Bus
 	}
 
 
-
 	template<std::integral Int>
-	Int ReadIO(u32 addr)
+	Int ReadIo(u32 addr)
 	{
-		return 0;
+		/* Reads are aligned, and all regions start at word-aligned addresses, so there cannot be a cross-region read. */
+		if (addr < 0x400'0060) {
+			return PPU::ReadReg<Int>(addr);
+		}
+		else if (addr < 0x400'00B0) {
+			return APU::ReadReg<Int>(addr);
+		}
+		else if (addr < 0x400'0100) {
+			return DMA::ReadReg<Int>(addr);
+		}
+		else if (addr < 0x400'0120) {
+			return Timers::ReadReg<Int>(addr);
+		}
+		else if (addr < 0x400'0130) {
+			return 0; /* serial #1 */
+		}
+		else if (addr < 0x400'0134) {
+			return Keypad::ReadReg<Int>(addr);
+		}
+		else if (addr < 0x400'0200) {
+			return 0; /* serial #2 */
+		}
+		else {
+			/* TODO */
+			return 0;
+		}
 	}
 
 
@@ -109,19 +133,7 @@ namespace Bus
 	void Write(u32 addr, Int data)
 	{
 		static_assert(sizeof(Int) == 1 || sizeof(Int) == 2 || sizeof(Int) == 4);
-		/* A byte store repeats the bottom 8 bits of the source register four times across
-		data bus outputs 31 through 0.
 		
-		A halfword store repeats the bottom 16 bits of the source register twice across
-		the data bus outputs 31 through to 0. Note that the address must be
-		halfword aligned; if bit 0 of the address is HIGH this will cause unpredictable
-		behaviour.
-
-		A word store should generate a word aligned address. The word presented to the
-		data bus is not affected if the address is not word aligned. That is, bit 31 of the
-		register being stored always appears on data bus output 31.
-		*/
-
 		if (addr & 0xF000'0000) { /* 1000'0000-FFFF'FFFF   Not used (upper 4bits of address bus unused) */
 			return;
 		}
@@ -142,7 +154,7 @@ namespace Bus
 			break;
 
 		case 0x4: /* 0400'0000-0400'03FE   I/O Registers */
-			WriteIO<Int>(addr, data);
+			WriteIo<Int>(addr, data);
 			break;
 
 		case 0x5: /* 0500'0000-0500'03FF   BG/OBJ Palette RAM */
@@ -169,9 +181,33 @@ namespace Bus
 
 
 	template<std::integral Int>
-	void WriteIO(u32 addr, Int data)
+	void WriteIo(u32 addr, Int data)
 	{
-
+		/* Writes are aligned, and all regions start at word-aligned addresses, so there cannot be a cross-region write. */
+		if (addr < 0x400'0060) {
+			PPU::WriteReg(addr, data);
+		}
+		else if (addr < 0x400'00B0) {
+			APU::WriteReg(addr, data);
+		}
+		else if (addr < 0x400'0100) {
+			DMA::WriteReg(addr, data);
+		}
+		else if (addr < 0x400'0120) {
+			Timers::WriteReg(addr, data);
+		}
+		else if (addr < 0x400'0130) {
+			/* serial #1 */
+		}
+		else if (addr < 0x400'0134) {
+			Keypad::WriteReg(addr, data);
+		}
+		else if (addr < 0x400'0200) {
+			/* serial #2 */
+		}
+		else {
+			/* TODO */
+		}
 	}
 
 

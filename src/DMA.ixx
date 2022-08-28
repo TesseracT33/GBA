@@ -2,11 +2,17 @@ export module DMA;
 
 import Util;
 
+import <concepts>;
 import <cstring>;
 
-export namespace DMA
+namespace DMA
 {
-	void Initialize();
+	export
+	{
+		void Initialize();
+		template<std::integral Int> Int ReadReg(u32 addr);
+		template<std::integral Int> void WriteReg(u32 addr, Int data);
+	}
 
 
 	template<uint index>

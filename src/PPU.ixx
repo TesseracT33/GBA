@@ -14,14 +14,23 @@ namespace PPU
 {
 	export
 	{
+		enum class Reg {
+			DISPCNT, GREEN_SWAP, DISPSTAT, VCOUNT, BG0CNT, BG1CNT, BG2CNT, BG3CNT,
+			BG0HOFS, BG0VOFS, BG1HOFS, BG1VOFS, BG2HOFS, BG2VOFS, BG3HOFS, BG3VOFS,
+			BG2PA, BG2PB, BG2PC, BG2PD, BG2X, BG2Y, BG3PA, BG3PB, BG3PC, BG3PD, BG3X, BG3Y,
+			WIN0H, WIN1H, WIN0V, WIN1V, WININ, WINOUT, MOSAIC, BLDCNT, BLDALPHA, BLDY
+		};
+
 		void Initialize();
 		template<std::integral Int> Int ReadOam(u32 addr);
 		template<std::integral Int> Int ReadPaletteRam(u32 addr);
+		template<std::integral Int> Int ReadReg(u32 addr);
 		template<std::integral Int> Int ReadVram(u32 addr);
 		void Step();
 		void StreamState(SerializationStream& stream);
 		template<std::integral Int> void WriteOam(u32 addr, Int data);
 		template<std::integral Int> void WritePaletteRam(u32 addr, Int data);
+		template<std::integral Int> void WriteReg(u32 addr, Int data);
 		template<std::integral Int> void WriteVram(u32 addr, Int data);
 	}
 
@@ -78,23 +87,34 @@ namespace PPU
 	void ScanOam();
 	void UpdateRotateScalingRegisters();
 
+	constexpr uint cycles_per_line = 1232;
+	constexpr uint cycles_until_hblank = 960;
+	constexpr uint cycles_until_set_hblank_flag = 1008;
+	constexpr uint dots_per_line = 240;
+	constexpr uint framebuffer_pitch = dots_per_line * 3;
+	constexpr uint lines_until_vblank = 160;
+	constexpr uint max_objects = 128;
+	constexpr uint total_num_lines = 228;
+
 	struct DISPCNT
 	{
-		u16 bg_mode               : 3; /* 0-5=Video Mode 0-5, 6-7=Prohibited */
-		u16 cgb_mode              : 1; /* 0=GBA, 1=CGB; can be set only by BIOS opcodes */
-		u16 display_frame_select  : 1; /* 0-1=Frame 0-1 (for BG Modes 4,5 only) */
-		u16 hblank_interval_free  : 1; /* 1=Allow access to OAM during H-Blank */
+		u16 bg_mode : 3; /* 0-5=Video Mode 0-5, 6-7=Prohibited */
+		u16 cgb_mode : 1; /* 0=GBA, 1=CGB; can be set only by BIOS opcodes */
+		u16 display_frame_select : 1; /* 0-1=Frame 0-1 (for BG Modes 4,5 only) */
+		u16 hblank_interval_free : 1; /* 1=Allow access to OAM during H-Blank */
 		u16 obj_char_vram_mapping : 1; /* 0=Two dimensional, 1=One dimensional */
-		u16 forced_blank          : 1; /* 1=Allow FAST access to VRAM,Palette,OAM */
-		u16 screen_display_bg0    : 1; /* 0=Off, 1=On */
-		u16 screen_display_bg1    : 1; /* 0=Off, 1=On */
-		u16 screen_display_bg2    : 1; /* 0=Off, 1=On */
-		u16 screen_display_bg3    : 1; /* 0=Off, 1=On */
-		u16 screen_display_obj    : 1; /* 0=Off, 1=On */
-		u16 win0_display          : 1; /* 0=Off, 1=On */
-		u16 win1_display          : 1; /* 0=Off, 1=On */
-		u16 obj_win_display       : 1; /* 0=Off, 1=On */
+		u16 forced_blank : 1; /* 1=Allow FAST access to VRAM,Palette,OAM */
+		u16 screen_display_bg0 : 1; /* 0=Off, 1=On */
+		u16 screen_display_bg1 : 1; /* 0=Off, 1=On */
+		u16 screen_display_bg2 : 1; /* 0=Off, 1=On */
+		u16 screen_display_bg3 : 1; /* 0=Off, 1=On */
+		u16 screen_display_obj : 1; /* 0=Off, 1=On */
+		u16 win0_display : 1; /* 0=Off, 1=On */
+		u16 win1_display : 1; /* 0=Off, 1=On */
+		u16 obj_win_display : 1; /* 0=Off, 1=On */
 	} dispcnt;
+
+	bool green_swap;
 
 	struct DISPSTAT
 	{
@@ -107,6 +127,8 @@ namespace PPU
 		u16 : 2;
 		u16 v_count_setting : 8;
 	} dispstat;
+
+	u8 ly;
 
 	struct BGCNT
 	{
@@ -124,16 +146,16 @@ namespace PPU
 	std::array<u16, 4> bghofs;
 	std::array<u16, 4> bgvofs;
 
-	struct BGXPY
+	struct BGP
 	{
 		u16 fractional : 8;
 		u16 integer : 7;
 		u16 sign : 1;
 	};
 
-	std::array<BGXPY, 2> bgpa, bgpb, bgpc, bgpd;
+	std::array<BGP, 2> bgpa, bgpb, bgpc, bgpd;
 
-	struct BGXY_Z
+	struct BGXY
 	{
 		u32 fractional : 8;
 		u32 integer : 19;
@@ -141,7 +163,7 @@ namespace PPU
 		u32 : 4;
 	};
 
-	std::array<BGXY_Z, 2> bgx, bgy;
+	std::array<BGXY, 2> bgx, bgy;
 
 	struct WININ
 	{
@@ -205,28 +227,8 @@ namespace PPU
 		u16 : 2;
 	} bldcnt;
 
-	struct BLDALPHA
-	{
-		u16 eva_coeff : 5;
-		u16 : 3;
-		u16 evb_coeff : 5;
-		u16 : 3;
-	} bldalpha;
-
-	struct BLDY
-	{
-		u32 evy_coeff : 5;
-		u32 : 27;
-	} bldy;
-
-	constexpr uint cycles_per_line = 1232;
-	constexpr uint cycles_until_hblank = 960;
-	constexpr uint cycles_until_set_hblank_flag = 1008;
-	constexpr uint dots_per_line = 240;
-	constexpr uint framebuffer_pitch = dots_per_line * 3;
-	constexpr uint lines_until_vblank = 160;
-	constexpr uint max_objects = 128;
-	constexpr uint total_num_lines = 228;
+	u8 eva, evb, evy;
+	std::array<u8, 2> winh_x1, winh_x2, winv_x1, winv_x2;
 
 	/* Size  Square   Horizontal  Vertical
 	0     8x8      16x8        8x16
@@ -240,13 +242,8 @@ namespace PPU
 		64, 64, 32, 64
 	};
 
-	bool green_swap;
 	bool in_hblank;
 	bool in_vblank;
-
-	u8 ly;
-	u8 win0h_x1, win0h_x2, win1h_x1, win1h_x2;
-	u8 win0l_x1, win0l_x2, win1l_x1, win1l_x2;
 
 	std::array<u32, 2> bg_rot_coord_x;
 	std::array<u32, 2> bg_rot_coord_y;
@@ -269,11 +266,12 @@ namespace PPU
 	Int ReadOam(u32 addr)
 	{
 		if ((in_hblank && dispcnt.hblank_interval_free) || in_vblank || dispcnt.forced_blank) {
-			addr &= 0x3FF;
-			return oam[addr & 0x3FF];
+			Int ret;
+			std::memcpy(&ret, oam.data() + (addr & 0x3FF), sizeof(Int));
+			return ret;
 		}
 		else {
-			return 0xFF;
+			return Int(-1);
 		}
 	}
 
@@ -282,10 +280,12 @@ namespace PPU
 	Int ReadPaletteRam(u32 addr)
 	{
 		if (in_hblank || in_vblank || dispcnt.forced_blank) {
-			return palette_ram[addr & 0x3FF];
+			Int ret;
+			std::memcpy(&ret, palette_ram.data() + (addr & 0x3FF), sizeof(Int));
+			return ret;
 		}
 		else {
-			return 0xFF;
+			return Int(-1);
 		}
 	}
 
@@ -294,10 +294,12 @@ namespace PPU
 	Int ReadVram(u32 addr)
 	{
 		if (in_hblank || in_vblank || dispcnt.forced_blank) {
-			return vram[addr & 0x17FFF];
+			Int ret;
+			std::memcpy(&ret, vram.data() + (addr % 0x18000), sizeof(Int));
+			return ret;
 		}
 		else {
-			return 0xFF;
+			return Int(-1);
 		}
 	}
 
@@ -305,20 +307,21 @@ namespace PPU
 	template<std::integral Int>
 	void WriteOam(u32 addr, Int data)
 	{
-
+		/* TODO: when can it be accessed? */
+		std::memcpy(oam.data() + (addr & 0x3FF), &data, sizeof(Int));
 	}
 
 
 	template<std::integral Int>
 	void WritePaletteRam(u32 addr, Int data)
 	{
-
+		std::memcpy(palette_ram.data() + (addr & 0x3FF), &data, sizeof(Int));
 	}
 
 
 	template<std::integral Int>
 	void WriteVram(u32 addr, Int data)
 	{
-
+		std::memcpy(vram.data() + (addr % 0x18000), &data, sizeof(Int));
 	}
 }

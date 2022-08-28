@@ -1,7 +1,8 @@
 export module GBA;
 
+import Cartridge;
+import CPU;
 import PPU;
-
 import Util;
 
 import <string>;
@@ -46,8 +47,8 @@ export namespace GBA
 
 	void Initialize()
 	{
-		//CPU::Initialize();
-		//PPU::Initialize();
+		CPU::Initialize();
+		PPU::Initialize();
 	}
 
 
@@ -59,7 +60,7 @@ export namespace GBA
 
 	bool LoadRom(const std::string& path)
 	{
-		return true;
+		return Cartridge::LoadRom(path);
 	}
 
 
@@ -90,7 +91,7 @@ export namespace GBA
 
 	void Run()
 	{
-		//CPU::Run();
+		CPU::Run();
 	}
 
 
