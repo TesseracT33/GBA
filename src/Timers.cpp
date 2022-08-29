@@ -69,41 +69,59 @@ namespace Timers
 	}
 
 
+	void Step(uint cycles)
+	{
+
+	}
+
+
+	void StreamState(SerializationStream& stream)
+	{
+
+	}
+
+
+	void Timer::WriteControl(u8 data)
+	{
+		Control prev_control = control;
+		control = std::bit_cast<Control>(data);
+		if (control.enable && !prev_control.enable) {
+			counter = reload;
+		}
+	}
+
+
 	template<std::integral Int>
 	void WriteReg(u32 addr, Int data)
 	{
 		auto WriteByte = [](u32 addr, u8 data) {
 			switch (addr) {
-			case Bus::ADDR_TM0CNT_L:     break;
-			case Bus::ADDR_TM0CNT_L + 1: break;
-			case Bus::ADDR_TM0CNT_H:     break;
-			case Bus::ADDR_TM0CNT_H + 1: break;
-			case Bus::ADDR_TM1CNT_L:     break;
-			case Bus::ADDR_TM1CNT_L + 1: break;
-			case Bus::ADDR_TM1CNT_H:     break;
-			case Bus::ADDR_TM1CNT_H + 1: break;
-			case Bus::ADDR_TM2CNT_L:     break;
-			case Bus::ADDR_TM2CNT_L + 1: break;
-			case Bus::ADDR_TM2CNT_H:     break;
-			case Bus::ADDR_TM2CNT_H + 1: break;
-			case Bus::ADDR_TM3CNT_L:     break;
-			case Bus::ADDR_TM3CNT_L + 1: break;
-			case Bus::ADDR_TM3CNT_H:     break;
-			case Bus::ADDR_TM3CNT_H + 1: break;
+			case Bus::ADDR_TM0CNT_L:     SetByte(timer[0].reload, 0, data); break;
+			case Bus::ADDR_TM0CNT_L + 1: SetByte(timer[0].reload, 1, data); break;
+			case Bus::ADDR_TM0CNT_H:     timer[0].WriteControl(data); break;
+			case Bus::ADDR_TM1CNT_L:     SetByte(timer[1].reload, 0, data); break;
+			case Bus::ADDR_TM1CNT_L + 1: SetByte(timer[1].reload, 1, data); break;
+			case Bus::ADDR_TM1CNT_H:     timer[1].WriteControl(data); break;
+			case Bus::ADDR_TM2CNT_L:     SetByte(timer[2].reload, 0, data); break;
+			case Bus::ADDR_TM2CNT_L + 1: SetByte(timer[2].reload, 1, data); break;
+			case Bus::ADDR_TM2CNT_H:     timer[2].WriteControl(data); break;
+			case Bus::ADDR_TM3CNT_L:     SetByte(timer[3].reload, 0, data); break;
+			case Bus::ADDR_TM3CNT_L + 1: SetByte(timer[3].reload, 1, data); break;
+			case Bus::ADDR_TM3CNT_H:     timer[3].WriteControl(data); break;
 			default: break;
 			}
 		};
 
 		auto WriteHalf = [](u32 addr, u16 data) {
 			switch (addr) {
-			case Bus::ADDR_TM0CNT_L:     break;
-			case Bus::ADDR_TM0CNT_H:     break;
-			case Bus::ADDR_TM1CNT_L:     break;
-			case Bus::ADDR_TM1CNT_H:     break;
-			case Bus::ADDR_TM2CNT_L:     break;
-			case Bus::ADDR_TM2CNT_H:     break;
-			case Bus::ADDR_TM3CNT_L:     break;
-			case Bus::ADDR_TM3CNT_H:     break;
+			case Bus::ADDR_TM0CNT_L: timer[0].reload = data; break;
+			case Bus::ADDR_TM0CNT_H: timer[0].WriteControl(data & 0xFF); break;
+			case Bus::ADDR_TM1CNT_L: timer[1].reload = data; break;
+			case Bus::ADDR_TM1CNT_H: timer[1].WriteControl(data & 0xFF); break;
+			case Bus::ADDR_TM2CNT_L: timer[2].reload = data; break;
+			case Bus::ADDR_TM2CNT_H: timer[2].WriteControl(data & 0xFF); break;
+			case Bus::ADDR_TM3CNT_L: timer[3].reload = data; break;
+			case Bus::ADDR_TM3CNT_H: timer[3].WriteControl(data & 0xFF); break;
 			default: break;
 			}
 		};

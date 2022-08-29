@@ -2,6 +2,7 @@ export module DMA;
 
 import Util;
 
+import <bit>;
 import <concepts>;
 import <cstring>;
 
@@ -18,10 +19,13 @@ namespace DMA
 	template<uint index>
 	struct DmaChannel
 	{
+		void WriteControlLo(u8 data);
+		void WriteControlHi(u8 data);
+		void WriteControl(u16 data);
 		u32 dst_addr;
 		u32 src_addr;
 		u16 count;
-		struct DmaControl
+		struct Control
 		{
 			u16 : 5;
 			u16 dst_addr_ctrl : 2;

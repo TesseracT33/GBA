@@ -12,11 +12,14 @@ namespace Timers
 	{
 		void Initialize();
 		template<std::integral Int> Int ReadReg(u32 addr);
+		void Step(uint cycles);
+		void StreamState(SerializationStream& stream);
 		template<std::integral Int> void WriteReg(u32 addr, Int data);
 	}
 
 	struct Timer
 	{
+		void WriteControl(u8 data);
 		u16 counter;
 		u16 reload;
 		struct Control
