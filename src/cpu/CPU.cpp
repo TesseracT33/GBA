@@ -2,6 +2,7 @@ module CPU;
 
 import Bus;
 import PPU;
+import Scheduler;
 
 #define sp (r[13])
 #define lr (r[14])
@@ -49,6 +50,11 @@ namespace CPU
 	}
 
 
+	u64 GetElapsedCycles()
+	{
+		return cycle;
+	}
+
 	u32 Fetch()
 	{
 		if (execution_state == ExecutionState::ARM) {
@@ -87,11 +93,11 @@ namespace CPU
 	}
 
 
-	void Run()
+	void Run(u64 cycles)
 	{
-		for (uint cycle = 0; cycle < 1000 /* TODO */; ++cycle) {
+		cycles_to_run = cycles;
+		for (cycle = 0; cycle < cycles_to_run; ++cycle) {
 			StepPipeline();
-			//PPU::Step();
 		}
 	}
 
@@ -220,9 +226,7 @@ namespace CPU
 
 	void StallPipeline(uint cycles)
 	{
-		for (uint i = 0; i < cycles; ++i) {
-			PPU::Step();
-		}
+		cycle += cycles;
 	}
 
 
@@ -239,12 +243,19 @@ namespace CPU
 			pipeline.index ^= 1;
 			pipeline.step++;
 		}
+		++cycle;
 	}
 
 
 	void StreamState(SerializationStream& stream)
 	{
 
+	}
+
+
+	void SuspendRun()
+	{
+		cycle = cycles_to_run;
 	}
 
 

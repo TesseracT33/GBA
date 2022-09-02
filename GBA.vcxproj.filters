@@ -125,5 +125,11 @@
     <ClCompile Include="src\debug\DebugOptions.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Scheduler.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Scheduler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

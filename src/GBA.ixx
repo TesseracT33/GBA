@@ -91,7 +91,7 @@ export namespace GBA
 
 	void Run()
 	{
-		CPU::Run();
+		
 	}
 
 

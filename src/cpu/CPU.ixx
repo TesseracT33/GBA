@@ -16,10 +16,12 @@ namespace CPU
 {
 	export
 	{
+		u64 GetElapsedCycles();
 		void Initialize();
-		void Run();
+		void Run(u64 cycles);
 		void SetIRQ(bool new_irq);
 		void StreamState(SerializationStream& stream);
+		void SuspendRun();
 	}
 
 	enum class Exception {
@@ -55,6 +57,7 @@ namespace CPU
 	u32 Fetch();
 	void FlushPipeline();
 	template<Exception> constexpr uint GetExceptionPriority();
+	u32 GetSecondOperand(u32 opcode);
 	void HandleDataAbortException();
 	void HandleFiqException();
 	void HandleIrqException();
@@ -160,5 +163,6 @@ namespace CPU
 	Exception occurred_exception;
 	uint occurred_exception_priority;
 
-	u32 GetSecondOperand(u32 opcode);
+	u64 cycle;
+	u64 cycles_to_run;
 }

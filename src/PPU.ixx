@@ -14,18 +14,12 @@ namespace PPU
 {
 	export
 	{
-		enum class Reg {
-			DISPCNT, GREEN_SWAP, DISPSTAT, VCOUNT, BG0CNT, BG1CNT, BG2CNT, BG3CNT,
-			BG0HOFS, BG0VOFS, BG1HOFS, BG1VOFS, BG2HOFS, BG2VOFS, BG3HOFS, BG3VOFS,
-			BG2PA, BG2PB, BG2PC, BG2PD, BG2X, BG2Y, BG3PA, BG3PB, BG3PC, BG3PD, BG3X, BG3Y,
-			WIN0H, WIN1H, WIN0V, WIN1V, WININ, WINOUT, MOSAIC, BLDCNT, BLDALPHA, BLDY
-		};
-
 		void Initialize();
 		template<std::integral Int> Int ReadOam(u32 addr);
 		template<std::integral Int> Int ReadPaletteRam(u32 addr);
 		template<std::integral Int> Int ReadReg(u32 addr);
 		template<std::integral Int> Int ReadVram(u32 addr);
+		void Scanline();
 		void Step();
 		void StreamState(SerializationStream& stream);
 		template<std::integral Int> void WriteOam(u32 addr, Int data);
@@ -77,7 +71,6 @@ namespace PPU
 	void PushPixel(ColorData color_data);
 	void PushPixel(RGB rgb);
 	void PushPixel(u8 r, u8 g, u8 b);
-	void Scanline();
 	void ScanlineBackgroundRotateScaleMode(uint bg);
 	void ScanlineBackgroundTextMode(uint bg);
 	void ScanlineBackgroundBitmapMode3();

@@ -1,6 +1,7 @@
 module PPU;
 
 import Bus;
+import Scheduler;
 
 namespace PPU
 {
@@ -298,6 +299,8 @@ namespace PPU
 		}
 
 		BlendBackgrounds();
+
+		Scheduler::AddEvent(Scheduler::EventType::LcdRender, 1000, Scanline);
 	}
 
 
