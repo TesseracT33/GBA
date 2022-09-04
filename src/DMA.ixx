@@ -61,10 +61,11 @@ namespace DMA
 		IRQ::Source irq_source;
 		Scheduler::Driver driver;
 		Scheduler::DriverRunFunc perform_dma_func;
+		Scheduler::DriverSuspendFunc suspend_dma_func;
 	};
 
-	template<uint dma_index>
-	u64 PerformDma(u64 max_cycles_to_run);
+	template<uint dma_index> u64 PerformDma(u64 max_cycles_to_run);
+	template<uint dma_index> void SuspendDma();
 
 	std::array<DmaChannel, 4> dma_ch;
 }

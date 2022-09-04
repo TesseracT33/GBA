@@ -20,6 +20,10 @@ namespace DMA
 		dma_ch[1].perform_dma_func = PerformDma<1>;
 		dma_ch[2].perform_dma_func = PerformDma<2>;
 		dma_ch[3].perform_dma_func = PerformDma<3>;
+		dma_ch[0].suspend_dma_func = SuspendDma<0>;
+		dma_ch[1].suspend_dma_func = SuspendDma<1>;
+		dma_ch[2].suspend_dma_func = SuspendDma<2>;
+		dma_ch[3].suspend_dma_func = SuspendDma<3>;
 		dma_ch[0].irq_source = IRQ::Source::Dma0;
 		dma_ch[1].irq_source = IRQ::Source::Dma1;
 		dma_ch[2].irq_source = IRQ::Source::Dma2;
@@ -175,6 +179,12 @@ namespace DMA
 		}
 	}
 
+	template<uint dma_index>
+	void SuspendDma()
+	{
+		dma_ch[dma_index].suspended = true;
+	}
+
 
 	template<std::integral Int>
 	void WriteReg(u32 addr, Int data)
@@ -316,7 +326,7 @@ namespace DMA
 		/* The 'suspend' function is a no-op. This is because a DMA can interrupted only by another DMA,
 		   started at VBlank, HBlank, etc., all of which have events associated with them. Importantly, the
 		   scheduler will run this dma channel only until such events occur, and then change dma channel if needed. */
-		Scheduler::EngageDriver(driver, perform_dma_func, [] {});
+		Scheduler::EngageDriver(driver, perform_dma_func, suspend_dma_func);
 	}
 
 
