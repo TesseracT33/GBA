@@ -1,10 +1,18 @@
 module PPU;
 
 import Bus;
+import DMA;
 import Scheduler;
 
 namespace PPU
 {
+	void AddInitialEvents()
+	{
+		Scheduler::AddEvent(Scheduler::EventType::HBlank, cycles_until_hblank, OnHBlank);
+		Scheduler::AddEvent(Scheduler::EventType::VBlank, lines_until_vblank * cycles_per_line, OnVBlank);
+	}
+
+
 	RGB AlphaBlend(RGB target_1, RGB target_2)
 	{
 		return {
@@ -126,6 +134,20 @@ namespace PPU
 		//objects.resize(sizeof(ObjectData) * max_objects);
 		//Scanline();
 		//UpdateRotateScalingRegisters();
+	}
+
+
+	void OnHBlank()
+	{
+		Scheduler::AddEvent(Scheduler::EventType::HBlank, cycles_per_line, OnHBlank);
+		DMA::OnHBlank();
+	}
+
+
+	void OnVBlank()
+	{
+		Scheduler::AddEvent(Scheduler::EventType::VBlank, cycles_per_line * total_num_lines, OnVBlank);
+		DMA::OnVBlank();
 	}
 
 
@@ -299,8 +321,6 @@ namespace PPU
 		}
 
 		BlendBackgrounds();
-
-		Scheduler::AddEvent(Scheduler::EventType::LcdRender, 1000, Scanline);
 	}
 
 

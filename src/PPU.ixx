@@ -14,6 +14,7 @@ namespace PPU
 {
 	export
 	{
+		void AddInitialEvents();
 		void Initialize();
 		template<std::integral Int> Int ReadOam(u32 addr);
 		template<std::integral Int> Int ReadPaletteRam(u32 addr);
@@ -68,6 +69,8 @@ namespace PPU
 	RGB BrightnessDecrease(RGB pixel);
 	RGB BrightnessIncrease(RGB pixel);
 	u8 GetObjectWidth(ObjectData obj_data);
+	void OnHBlank();
+	void OnVBlank();
 	void PushPixel(ColorData color_data);
 	void PushPixel(RGB rgb);
 	void PushPixel(u8 r, u8 g, u8 b);

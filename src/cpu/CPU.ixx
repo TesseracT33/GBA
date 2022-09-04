@@ -18,7 +18,7 @@ namespace CPU
 	{
 		u64 GetElapsedCycles();
 		void Initialize();
-		void Run(u64 cycles);
+		u64 Run(u64 cycles);
 		void SetIRQ(bool new_irq);
 		void StreamState(SerializationStream& stream);
 		void SuspendRun();
@@ -147,6 +147,7 @@ namespace CPU
 	} cpsr;
 
 	bool irq;
+	bool suspend;
 
 	std::array<u32, 5> r8_r12_non_fiq; /* R8-R12 */
 	std::array<u32, 5> r8_r12_fiq; /* R8-R12 */
@@ -164,5 +165,4 @@ namespace CPU
 	uint occurred_exception_priority;
 
 	u64 cycle;
-	u64 cycles_to_run;
 }

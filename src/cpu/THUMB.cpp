@@ -151,11 +151,7 @@ namespace CPU
 					return u32(s32(r[rs]) >> shift_amount);
 				}
 
-			case 0b11: /* ADD/SUB; already covered by other function */
-				assert(false);
-				break;
-
-			default:
+			default: /* 0b11 => ADD/SUB; already covered by other function */
 				std::unreachable();
 			}
 		}();

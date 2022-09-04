@@ -93,12 +93,14 @@ namespace CPU
 	}
 
 
-	void Run(u64 cycles)
+	u64 Run(u64 cycles)
 	{
-		cycles_to_run = cycles;
-		for (cycle = 0; cycle < cycles_to_run; ++cycle) {
+		suspend = false;
+		cycle = 0;
+		while (cycle < cycles && !suspend) {
 			StepPipeline();
 		}
+		return cycle;
 	}
 
 
@@ -255,7 +257,7 @@ namespace CPU
 
 	void SuspendRun()
 	{
-		cycle = cycles_to_run;
+		suspend = true;
 	}
 
 
