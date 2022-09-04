@@ -31,7 +31,7 @@ namespace DMA
 	{
 		static constexpr u16 hblank_start_timing = 2;
 		std::ranges::for_each(dma_ch, [](const DmaChannel& dma) {
-			if (dma.active && dma.control.start_timing == hblank_start_timing) {
+			if (dma.control.enable && dma.control.start_timing == hblank_start_timing) {
 				dma.NotifyDmaActive();
 			}
 		});
@@ -42,7 +42,7 @@ namespace DMA
 	{
 		static constexpr u16 vblank_start_timing = 1;
 		std::ranges::for_each(dma_ch, [](const DmaChannel& dma) {
-			if (dma.active && dma.control.start_timing == vblank_start_timing) {
+			if (dma.control.enable && dma.control.start_timing == vblank_start_timing) {
 				dma.NotifyDmaActive();
 			}
 		});
@@ -112,7 +112,7 @@ namespace DMA
 				}
 			}
 			else {
-				dma.control.enable = dma.active = false;
+				dma.control.enable = false;
 			}
 		}
 		return cycle;
@@ -295,14 +295,12 @@ namespace DMA
 
 	void DmaChannel::OnDmaDisable()
 	{
-		active = false;
 		NotifyDmaInactive();
 	}
 
 
 	void DmaChannel::OnDmaEnable()
 	{
-		active = true;
 		next_copy_is_repeat = suspended = false;
 		ReloadCount();
 		ReloadDstAddr();

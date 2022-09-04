@@ -35,7 +35,6 @@ namespace DMA
 		void WriteControlLo(u8 data);
 		void WriteControlHi(u8 data);
 		void WriteControl(u16 data);
-		bool active;
 		bool next_copy_is_repeat;
 		bool suspended;
 		uint index;
