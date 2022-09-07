@@ -2,6 +2,7 @@ module PPU;
 
 import Bus;
 import DMA;
+import IRQ;
 import Scheduler;
 
 namespace PPU
@@ -9,7 +10,6 @@ namespace PPU
 	void AddInitialEvents()
 	{
 		Scheduler::AddEvent(Scheduler::EventType::HBlank, cycles_until_hblank, OnHBlank);
-		Scheduler::AddEvent(Scheduler::EventType::VBlank, lines_until_vblank * cycles_per_line, OnVBlank);
 	}
 
 
@@ -139,15 +139,57 @@ namespace PPU
 
 	void OnHBlank()
 	{
-		Scheduler::AddEvent(Scheduler::EventType::HBlank, cycles_per_line, OnHBlank);
+		Scheduler::AddEvent(Scheduler::EventType::HBlankSetFlag, cycles_until_set_hblank_flag - cycles_until_hblank, OnHBlankSetFlag);
+		in_hblank = true;
 		DMA::OnHBlank();
 	}
 
 
-	void OnVBlank()
+	void OnHBlankSetFlag()
 	{
-		Scheduler::AddEvent(Scheduler::EventType::VBlank, cycles_per_line * total_num_lines, OnVBlank);
-		DMA::OnVBlank();
+		Scheduler::AddEvent(Scheduler::EventType::NewScanline, cycles_per_line - cycles_until_set_hblank_flag, OnNewScanline);
+		dispstat.hblank = 1;
+		if (dispstat.hblank_irq_enable) { /* TODO: here or in OnHBlank? */
+			IRQ::Raise(IRQ::Source::HBlank);
+		}
+	}
+
+
+	void OnNewScanline()
+	{
+		Scheduler::AddEvent(Scheduler::EventType::HBlank, cycles_until_hblank, OnHBlank);
+		dispstat.hblank = in_hblank = false;
+		++v_counter;
+		if (dispstat.v_counter_irq_enable) {
+			bool prev_v_counter_match = dispstat.v_counter_match;
+			dispstat.v_counter_match = v_counter == dispstat.v_count_setting;
+			if (dispstat.v_counter_match && !prev_v_counter_match) {
+				IRQ::Raise(IRQ::Source::VCounter);
+			}
+		}
+		else {
+			dispstat.v_counter_match = v_counter == dispstat.v_count_setting;
+		}
+		if (v_counter < lines_until_vblank) {
+			UpdateRotateScalingRegisters();
+		}
+		else if (v_counter == lines_until_vblank) {
+			dispstat.vblank = in_vblank = true;
+			if (dispstat.vblank_irq_enable) {
+				IRQ::Raise(IRQ::Source::VBlank);
+			}
+			framebuffer_index = 0;
+			DMA::OnVBlank();
+		}
+		else if (v_counter == total_num_lines - 1) {
+			dispstat.vblank = 0; /* not set in the last line */
+			in_vblank = false;
+			//bg_rot_coord_x = 0x0FFF'FFFF & std::bit_cast<u64>(bgx);
+			//bg_rot_coord_y = 0x0FFF'FFFF & std::bit_cast<u64>(bgy);
+		}
+		else {
+			v_counter %= total_num_lines; /* cheaper than comparison on ly == total_num_lines to set ly = 0? */
+		}
 	}
 
 
@@ -186,7 +228,7 @@ namespace PPU
 			case Bus::ADDR_GREEN_SWAP + 1: return u8(0);
 			case Bus::ADDR_DISPSTAT:       return GetByte(dispstat, 0);
 			case Bus::ADDR_DISPSTAT + 1:   return GetByte(dispstat, 1);
-			case Bus::ADDR_VCOUNT:         return ly;
+			case Bus::ADDR_VCOUNT:         return v_counter;
 			case Bus::ADDR_VCOUNT + 1:     return u8(0);
 			case Bus::ADDR_BG0CNT:         return GetByte(bgcnt[0], 0);
 			case Bus::ADDR_BG0CNT + 1:     return GetByte(bgcnt[0], 1);
@@ -213,7 +255,7 @@ namespace PPU
 			case Bus::ADDR_DISPCNT:    return std::bit_cast<u16>(dispcnt);
 			case Bus::ADDR_GREEN_SWAP: return u16(green_swap);
 			case Bus::ADDR_DISPSTAT:   return std::bit_cast<u16>(dispstat);
-			case Bus::ADDR_VCOUNT:     return u16(ly);
+			case Bus::ADDR_VCOUNT:     return u16(v_counter);
 			case Bus::ADDR_BG0CNT:     return std::bit_cast<u16>(bgcnt[0]);
 			case Bus::ADDR_BG1CNT:     return std::bit_cast<u16>(bgcnt[1]);
 			case Bus::ADDR_BG2CNT:     return std::bit_cast<u16>(bgcnt[2]);
@@ -337,7 +379,7 @@ namespace PPU
 
 		const uint bg_width = screen_size_to_bg_width_text_mode[bgcnt[bg].screen_size];
 		const uint bg_height = screen_size_to_bg_height_text_mode[bgcnt[bg].screen_size];
-		const uint bg_tile_index_y = ((bgvofs[bg] + ly) & (bg_height - 1)) / 8;
+		const uint bg_tile_index_y = ((bgvofs[bg] + v_counter) & (bg_height - 1)) / 8;
 		const uint bg_map_base_addr = bgcnt[bg].screen_base_block * 0x800 + bg_height / 4 * bg_tile_index_y;
 		uint bg_tile_index_x = (bghofs[bg] & (bg_width - 1)) / 8;
 		uint dot = 0;
@@ -433,7 +475,7 @@ namespace PPU
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
 			uint color_index = 2 * dot;
 			ColorData color_data;
-			std::memcpy(&color_data, vram.data() + 480 * ly + color_index, 2);
+			std::memcpy(&color_data, vram.data() + 480 * v_counter + color_index, 2);
 			PushPixel(color_data);
 		}
 	}
@@ -462,7 +504,7 @@ namespace PPU
 		for (; dot < 200; ++dot) {
 			uint color_index = 2 * dot;
 			ColorData color_data;
-			std::memcpy(&color_data, vram.data() + 480 * ly + color_index, 2);
+			std::memcpy(&color_data, vram.data() + 480 * v_counter + color_index, 2);
 			PushPixel(color_data);
 		}
 		for (; dot < dots_per_line; ++dot) {
@@ -539,7 +581,7 @@ namespace PPU
 				continue;
 			}
 			u8 y_coord = oam[oam_addr] & 0xFF;
-			if (y_coord <= ly) {
+			if (y_coord <= v_counter) {
 				u8 obj_shape = oam[oam_addr + 1] >> 6 & 3;
 				u8 obj_size = oam[oam_addr + 5] >> 6 & 3;
 				static constexpr u8 obj_size_y[4][4] = {
@@ -549,61 +591,11 @@ namespace PPU
 					64, 32, 64, 64
 				};
 				u8 obj_height = (1 + double_size_obj_disable) * obj_size_y[obj_size][obj_shape];
-				if (y_coord + obj_height > ly) {
+				if (y_coord + obj_height > v_counter) {
 					ObjectData obj_data;
 					std::memcpy(&obj_data, oam.data() + oam_addr, 6);
 					objects.push_back(obj_data);
 				}
-			}
-		}
-	}
-
-
-	void Step()
-	{
-		++cycle;
-		if (cycle == cycles_until_hblank) {
-			in_hblank = true;
-		}
-		else if (cycle == cycles_until_set_hblank_flag) {
-			dispstat.hblank = 1;
-			if (!in_vblank && dispstat.hblank_irq_enable) {
-				/* TODO IRQ */
-			}
-		}
-		else if (cycle == cycles_per_line) {
-			cycle = 0;
-			dispstat.hblank = 0;
-			in_hblank = false;
-
-			++ly;
-			bool prev_v_counter = dispstat.v_counter;
-			dispstat.v_counter = ly == dispstat.v_count_setting; /* TODO: 0..227? */
-			if (dispstat.v_counter && !prev_v_counter) {
-				if (dispstat.v_counter_irq_enable) {
-					/* TODO IRQ */
-				}
-			}
-			if (ly < lines_until_vblank) {
-				Scanline();
-				UpdateRotateScalingRegisters();
-			}
-			else if (ly == lines_until_vblank) {
-				dispstat.vblank = 1;
-				in_vblank = true;
-				if (dispstat.vblank_irq_enable) {
-					/* TODO IRQ */
-				}
-				framebuffer_index = 0;
-			}
-			else if (ly == total_num_lines - 1) {
-				dispstat.vblank = 0;
-				in_vblank = false;
-				//bg_rot_coord_x = 0x0FFF'FFFF & std::bit_cast<u64, decltype(bgx)>(bgx);
-				//bg_rot_coord_y = 0x0FFF'FFFF & std::bit_cast<u64, decltype(bgy)>(bgy);
-			}
-			else {
-				ly %= total_num_lines; /* cheaper than branch on ly == total_num_lines to set ly = 0? */
 			}
 		}
 	}

@@ -21,7 +21,6 @@ namespace PPU
 		template<std::integral Int> Int ReadReg(u32 addr);
 		template<std::integral Int> Int ReadVram(u32 addr);
 		void Scanline();
-		void Step();
 		void StreamState(SerializationStream& stream);
 		template<std::integral Int> void WriteOam(u32 addr, Int data);
 		template<std::integral Int> void WritePaletteRam(u32 addr, Int data);
@@ -70,7 +69,8 @@ namespace PPU
 	RGB BrightnessIncrease(RGB pixel);
 	u8 GetObjectWidth(ObjectData obj_data);
 	void OnHBlank();
-	void OnVBlank();
+	void OnHBlankSetFlag();
+	void OnNewScanline();
 	void PushPixel(ColorData color_data);
 	void PushPixel(RGB rgb);
 	void PushPixel(u8 r, u8 g, u8 b);
@@ -85,7 +85,7 @@ namespace PPU
 
 	constexpr uint cycles_per_line = 1232;
 	constexpr uint cycles_until_hblank = 960;
-	constexpr uint cycles_until_set_hblank_flag = 1008;
+	constexpr uint cycles_until_set_hblank_flag = 1006;
 	constexpr uint dots_per_line = 240;
 	constexpr uint framebuffer_pitch = dots_per_line * 3;
 	constexpr uint lines_until_vblank = 160;
@@ -116,7 +116,7 @@ namespace PPU
 	{
 		u16 vblank : 1;
 		u16 hblank : 1;
-		u16 v_counter : 1;
+		u16 v_counter_match : 1;
 		u16 vblank_irq_enable : 1;
 		u16 hblank_irq_enable : 1;
 		u16 v_counter_irq_enable : 1;
@@ -124,7 +124,7 @@ namespace PPU
 		u16 v_count_setting : 8;
 	} dispstat;
 
-	u8 ly;
+	u8 v_counter;
 
 	struct BGCNT
 	{

@@ -24,11 +24,12 @@ namespace Scheduler
 
 		enum class EventType {
 			HBlank,
+			HBlankSetFlag,
+			NewScanline,
 			TimerOverflow0,
 			TimerOverflow1,
 			TimerOverflow2,
 			TimerOverflow3,
-			VBlank
 		};
 
 		void AddEvent(EventType event_type, u64 time_until_fire, EventCallback callback);
