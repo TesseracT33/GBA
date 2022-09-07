@@ -261,7 +261,7 @@ namespace PPU
 	template<std::integral Int>
 	Int ReadOam(u32 addr)
 	{
-		if ((in_hblank && dispcnt.hblank_interval_free) || in_vblank || dispcnt.forced_blank) {
+		if (dispcnt.forced_blank || in_vblank || in_hblank && dispcnt.hblank_interval_free) {
 			Int ret;
 			std::memcpy(&ret, oam.data() + (addr & 0x3FF), sizeof(Int));
 			return ret;
@@ -275,7 +275,7 @@ namespace PPU
 	template<std::integral Int>
 	Int ReadPaletteRam(u32 addr)
 	{
-		if (in_hblank || in_vblank || dispcnt.forced_blank) {
+		if (dispcnt.forced_blank || in_vblank || in_hblank) {
 			Int ret;
 			std::memcpy(&ret, palette_ram.data() + (addr & 0x3FF), sizeof(Int));
 			return ret;
@@ -289,7 +289,7 @@ namespace PPU
 	template<std::integral Int>
 	Int ReadVram(u32 addr)
 	{
-		if (in_hblank || in_vblank || dispcnt.forced_blank) {
+		if (dispcnt.forced_blank || in_vblank || in_hblank) {
 			Int ret;
 			std::memcpy(&ret, vram.data() + (addr % 0x18000), sizeof(Int));
 			return ret;
@@ -303,21 +303,26 @@ namespace PPU
 	template<std::integral Int>
 	void WriteOam(u32 addr, Int data)
 	{
-		/* TODO: when can it be accessed? */
-		std::memcpy(oam.data() + (addr & 0x3FF), &data, sizeof(Int));
+		if (dispcnt.forced_blank || in_vblank || in_hblank && dispcnt.hblank_interval_free) {
+			std::memcpy(oam.data() + (addr & 0x3FF), &data, sizeof(Int));
+		}
 	}
 
 
 	template<std::integral Int>
 	void WritePaletteRam(u32 addr, Int data)
 	{
-		std::memcpy(palette_ram.data() + (addr & 0x3FF), &data, sizeof(Int));
+		if (dispcnt.forced_blank || in_vblank || in_hblank) {
+			std::memcpy(palette_ram.data() + (addr & 0x3FF), &data, sizeof(Int));
+		}
 	}
 
 
 	template<std::integral Int>
 	void WriteVram(u32 addr, Int data)
 	{
-		std::memcpy(vram.data() + (addr % 0x18000), &data, sizeof(Int));
+		if (dispcnt.forced_blank || in_vblank || in_hblank) {
+			std::memcpy(vram.data() + (addr % 0x18000), &data, sizeof(Int));
+		}
 	}
 }
