@@ -354,7 +354,7 @@ namespace PPU
 			const uint bg_tile_index_y = ((bgvofs[bg] + v_counter) & 255) / tile_size;
 			uint tile_map_addr_base = bgcnt[bg].screen_base_block;
 			if (bg_height == 512 && ((bgvofs[bg] + v_counter) & 511) > 255) {
-				tile_map_addr_base += 2; /* SC0/SC1 => SC2/SC3 */
+				tile_map_addr_base += 1 + (bg_width == 512); /* BG width == 256: SC0 => SC1; BG width == 512: SC0/SC1 => SC2/SC3 */
 			}
 			tile_map_addr_base *= 0x800;
 			return tile_map_addr_base + bg_tile_index_y * bytes_per_bg_map_area_row;
