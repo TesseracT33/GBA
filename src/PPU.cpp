@@ -290,35 +290,53 @@ namespace PPU
 			return;
 		}
 
+		auto RenderTransparentBg = [&](uint bg) {
+			for (uint dot = 0; dot < dots_per_line; ++dot) {
+				bg_render[bg][dot] = transparent_pixel;
+			}
+		};
+
 		switch (dispcnt.bg_mode) {
 		case 0:
-			if (dispcnt.screen_display_bg0) ScanlineBackgroundTextMode(0);
-			if (dispcnt.screen_display_bg1) ScanlineBackgroundTextMode(1);
-			if (dispcnt.screen_display_bg2) ScanlineBackgroundTextMode(2);
-			if (dispcnt.screen_display_bg3) ScanlineBackgroundTextMode(3);
+			dispcnt.screen_display_bg0 ? ScanlineBackgroundTextMode(0) : RenderTransparentBg(0);
+			dispcnt.screen_display_bg1 ? ScanlineBackgroundTextMode(1) : RenderTransparentBg(1);
+			dispcnt.screen_display_bg2 ? ScanlineBackgroundTextMode(2) : RenderTransparentBg(2);
+			dispcnt.screen_display_bg3 ? ScanlineBackgroundTextMode(3) : RenderTransparentBg(3);
 			break;
 
 		case 1:
-			if (dispcnt.screen_display_bg0) ScanlineBackgroundTextMode(0);
-			if (dispcnt.screen_display_bg1) ScanlineBackgroundTextMode(1);
-			if (dispcnt.screen_display_bg2) ScanlineBackgroundRotateScaleMode(2);
+			dispcnt.screen_display_bg0 ? ScanlineBackgroundTextMode(0) : RenderTransparentBg(0);
+			dispcnt.screen_display_bg1 ? ScanlineBackgroundTextMode(1) : RenderTransparentBg(1);
+			dispcnt.screen_display_bg2 ? ScanlineBackgroundRotateScaleMode(2) : RenderTransparentBg(2);
+			RenderTransparentBg(3);
 			break;
 
 		case 2:
-			if (dispcnt.screen_display_bg2) ScanlineBackgroundRotateScaleMode(2);
-			if (dispcnt.screen_display_bg3) ScanlineBackgroundRotateScaleMode(3);
+			RenderTransparentBg(0);
+			RenderTransparentBg(1);
+			dispcnt.screen_display_bg2 ? ScanlineBackgroundRotateScaleMode(2) : RenderTransparentBg(2);
+			dispcnt.screen_display_bg3 ? ScanlineBackgroundRotateScaleMode(3) : RenderTransparentBg(3);
 			break;
 
 		case 3:
-			if (dispcnt.screen_display_bg2) ScanlineBackgroundBitmapMode3();
+			RenderTransparentBg(0);
+			RenderTransparentBg(1);
+			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode3() : RenderTransparentBg(2);
+			RenderTransparentBg(3);
 			break;
 
 		case 4:
-			if (dispcnt.screen_display_bg2) ScanlineBackgroundBitmapMode4();
+			RenderTransparentBg(0);
+			RenderTransparentBg(1);
+			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode4() : RenderTransparentBg(2);
+			RenderTransparentBg(3);
 			break;
 
 		case 5:
-			if (dispcnt.screen_display_bg2) ScanlineBackgroundBitmapMode5();
+			RenderTransparentBg(0);
+			RenderTransparentBg(1);
+			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode5() : RenderTransparentBg(2);
+			RenderTransparentBg(3);
 			break;
 
 		case 6:
@@ -331,6 +349,11 @@ namespace PPU
 
 		if (dispcnt.screen_display_obj) {
 			ScanlineObjects();
+		}
+		else {
+			for (uint dot = 0; dot < dots_per_line; ++dot) {
+				obj_render[dot] = transparent_pixel;
+			}
 		}
 
 		BlendBackgrounds();
@@ -445,43 +468,50 @@ namespace PPU
 
 	void ScanlineBackgroundBitmapMode3()
 	{
+		constexpr static uint col_size = 2;
+		constexpr static uint bytes_per_scanline = total_num_lines * col_size;
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
-			uint color_index = 2 * dot;
-			ColorData color_data;
-			std::memcpy(&color_data, vram.data() + 480 * v_counter + color_index, 2);
-			PushPixel(color_data);
+			ColorData col;
+			std::memcpy(&col, vram.data() + v_counter * bytes_per_scanline + dot * col_size, col_size);
+			col.transparent = false; /* The two bytes directly define one of the 32768 colors (without using palette data, and thus not supporting a 'transparent' BG color) */
+			bg_render[2][dot] = col;
 		}
 	}
 
 
 	void ScanlineBackgroundBitmapMode4()
 	{
-		uint vram_frame_offset = dispcnt.display_frame_select ? 0x9600 : 0;
+		constexpr static uint col_size = 2;
+		constexpr static uint bytes_per_scanline = total_num_lines;
+		const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
-			uint color_index = dot;
-			uint palette_index = vram[vram_frame_offset + color_index];
-			ColorData color_data;
-			std::memcpy(&color_data, palette_ram.data() + 2 * palette_index, 2);
-			PushPixel(color_data);
+			uint palette_index = vram[vram_frame_offset + v_counter * bytes_per_scanline + dot];
+			ColorData col;
+			std::memcpy(&col, palette_ram.data() + palette_index * col_size, col_size);
+			col.transparent = palette_index == 0;
+			bg_render[2][dot] = col;
 		}
 	}
 
 
 	void ScanlineBackgroundBitmapMode5()
 	{
-		uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
+		/* TODO: can objects be drawn around the background? Probably yes */
+		constexpr static uint col_size = 2;
+		constexpr static uint bytes_per_scanline = total_num_lines * col_size;
+		const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
 		uint dot = 0;
-		for (; dot < 40; ++dot) { /* TODO: don't know about this */
-			PushPixel(0xFF, 0xFF, 0xFF);
+		for (; dot < 40; ++dot) {
+			bg_render[2][dot] = transparent_pixel;
 		}
 		for (; dot < 200; ++dot) {
-			uint color_index = 2 * dot;
-			ColorData color_data;
-			std::memcpy(&color_data, vram.data() + 480 * v_counter + color_index, 2);
-			PushPixel(color_data);
+			ColorData col;
+			std::memcpy(&col, vram.data() + vram_frame_offset + v_counter * bytes_per_scanline + dot * col_size, col_size);
+			col.transparent = false; /* The two bytes directly define one of the 32768 colors (without using palette data, and thus not supporting a 'transparent' BG color) */
+			bg_render[2][dot] = col;
 		}
-		for (; dot < dots_per_line; ++dot) {
-			PushPixel(0xFF, 0xFF, 0xFF);
+		for (; dot < 240; ++dot) {
+			bg_render[2][dot] = transparent_pixel;
 		}
 	}
 

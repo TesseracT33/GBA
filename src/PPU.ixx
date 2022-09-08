@@ -91,6 +91,7 @@ namespace PPU
 	constexpr uint lines_until_vblank = 160;
 	constexpr uint max_objects = 128;
 	constexpr uint total_num_lines = 228;
+	constexpr ColorData transparent_pixel = { .r = 0, .g = 0, .b = 0, .transparent = true };
 
 	struct DISPCNT
 	{
@@ -131,7 +132,7 @@ namespace PPU
 		u16 bg_priority : 2; /* 0-3, 0=Highest */
 		u16 char_base_block : 2; /* 0-3, in units of 16 KBytes (=BG Tile Data) */
 		u16 : 2;
-		u16 mosaic : 1; /* 0=Disable, 1=Enable */
+		u16 mosaic_enable : 1; /* 0=Disable, 1=Enable */
 		u16 palette_mode : 1; /* 0=16/16, 1=256/1 */
 		u16 screen_base_block : 5; /* 0-31, in units of 2 KBytes (=BG Map Data) */
 		u16 ext_palette_slot_display_area_overflow : 1;
@@ -249,6 +250,7 @@ namespace PPU
 	uint framebuffer_index;
 
 	std::array<std::array<ColorData, dots_per_line>, 4> bg_render;
+	std::array<ColorData, dots_per_line> obj_render;
 
 	std::array<u8, 0x400> oam;
 	std::array<u8, 0x400> palette_ram;
