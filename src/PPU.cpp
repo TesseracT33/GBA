@@ -26,13 +26,12 @@ namespace PPU
 	void BlendBackgrounds()
 	{
 		/* Sort backgrounds after priority */
-		static constexpr std::array<ColorData*, 4> bg_color_data_begin_ptrs_default = {
-			current_scanline_bg_layers[0].data(),
-			current_scanline_bg_layers[1].data(),
-			current_scanline_bg_layers[2].data(),
-			current_scanline_bg_layers[3].data()
+		std::array<ColorData*, 4> bg_color_data_begin_ptrs = {
+			bg_render[0].data(),
+			bg_render[1].data(),
+			bg_render[2].data(),
+			bg_render[3].data()
 		};
-		std::array<ColorData*, 4> bg_color_data_begin_ptrs = bg_color_data_begin_ptrs_default;
 		for (int i = 0; i < 4; ++i) {
 			for (int j = 0; j < 3; ++j) {
 				if (bgcnt[j].bg_priority < bgcnt[j + 1].bg_priority) {
@@ -268,12 +267,6 @@ namespace PPU
 			}
 		};
 
-		auto ReadWord = [&](u32 addr) {
-			u16 lo = ReadHalf(addr);
-			u16 hi = ReadHalf(addr + 2);
-			return lo | hi << 16;
-		};
-
 		if constexpr (sizeof(Int) == 1) {
 			return ReadByte(addr);
 		}
@@ -281,7 +274,9 @@ namespace PPU
 			return ReadHalf(addr);
 		}
 		if constexpr (sizeof(Int) == 4) {
-			return ReadWord(addr);
+			u16 lo = ReadHalf(addr);
+			u16 hi = ReadHalf(addr + 2);
+			return lo | hi << 16;
 		}
 	}
 
@@ -289,7 +284,7 @@ namespace PPU
 	void Scanline()
 	{
 		if (dispcnt.forced_blank) {
-			/* output all white pixels */
+			/* output only white pixels */
 			std::memset(framebuffer.data() + framebuffer_index, 0xFF, framebuffer_pitch);
 			framebuffer_index += framebuffer_pitch;
 			return;
@@ -297,57 +292,33 @@ namespace PPU
 
 		switch (dispcnt.bg_mode) {
 		case 0:
-			if (dispcnt.screen_display_bg0) {
-				ScanlineBackgroundTextMode(0);
-			}
-			if (dispcnt.screen_display_bg1) {
-				ScanlineBackgroundTextMode(1);
-			}
-			if (dispcnt.screen_display_bg2) {
-				ScanlineBackgroundTextMode(2);
-			}
-			if (dispcnt.screen_display_bg3) {
-				ScanlineBackgroundTextMode(3);
-			}
+			if (dispcnt.screen_display_bg0) ScanlineBackgroundTextMode(0);
+			if (dispcnt.screen_display_bg1) ScanlineBackgroundTextMode(1);
+			if (dispcnt.screen_display_bg2) ScanlineBackgroundTextMode(2);
+			if (dispcnt.screen_display_bg3) ScanlineBackgroundTextMode(3);
 			break;
 
 		case 1:
-			if (dispcnt.screen_display_bg0) {
-				ScanlineBackgroundTextMode(0);
-			}
-			if (dispcnt.screen_display_bg1) {
-				ScanlineBackgroundTextMode(1);
-			}
-			if (dispcnt.screen_display_bg2) {
-				ScanlineBackgroundRotateScaleMode(2);
-			}
+			if (dispcnt.screen_display_bg0) ScanlineBackgroundTextMode(0);
+			if (dispcnt.screen_display_bg1) ScanlineBackgroundTextMode(1);
+			if (dispcnt.screen_display_bg2) ScanlineBackgroundRotateScaleMode(2);
 			break;
 
 		case 2:
-			if (dispcnt.screen_display_bg2) {
-				ScanlineBackgroundRotateScaleMode(2);
-			}
-			if (dispcnt.screen_display_bg3) {
-				ScanlineBackgroundRotateScaleMode(3);
-			}
+			if (dispcnt.screen_display_bg2) ScanlineBackgroundRotateScaleMode(2);
+			if (dispcnt.screen_display_bg3) ScanlineBackgroundRotateScaleMode(3);
 			break;
 
 		case 3:
-			if (dispcnt.screen_display_bg2) {
-				ScanlineBackgroundBitmapMode3();
-			}
+			if (dispcnt.screen_display_bg2) ScanlineBackgroundBitmapMode3();
 			break;
 
 		case 4:
-			if (dispcnt.screen_display_bg2) {
-				ScanlineBackgroundBitmapMode4();
-			}
+			if (dispcnt.screen_display_bg2) ScanlineBackgroundBitmapMode4();
 			break;
 
 		case 5:
-			if (dispcnt.screen_display_bg2) {
-				ScanlineBackgroundBitmapMode5();
-			}
+			if (dispcnt.screen_display_bg2) ScanlineBackgroundBitmapMode5();
 			break;
 
 		case 6:
@@ -374,99 +345,101 @@ namespace PPU
 
 	void ScanlineBackgroundTextMode(uint bg)
 	{
-		static constexpr std::array<uint, 4> screen_size_to_bg_width_text_mode = { 256, 512, 256, 512 };
-		static constexpr std::array<uint, 4> screen_size_to_bg_height_text_mode = { 256, 256, 512, 512 };
-
-		const uint bg_width = screen_size_to_bg_width_text_mode[bgcnt[bg].screen_size];
-		const uint bg_height = screen_size_to_bg_height_text_mode[bgcnt[bg].screen_size];
-		const uint bg_tile_index_y = ((bgvofs[bg] + v_counter) & (bg_height - 1)) / 8;
-		const uint bg_map_base_addr = bgcnt[bg].screen_base_block * 0x800 + bg_height / 4 * bg_tile_index_y;
-		uint bg_tile_index_x = (bghofs[bg] & (bg_width - 1)) / 8;
+		constexpr static uint tile_size = 8;
+		constexpr static uint map_entry_size = 2;
+		const uint bg_width = 256 << (bgcnt[bg].screen_size & 1); /* 0 => 256; 1 => 512; 2 => 256; 3 = 512 */
+		const uint tile_map_addr_base = [&] { /* already takes into account which vertical tile we're on (it's constant), but not horizontal */
+			constexpr static uint bytes_per_bg_map_area_row = 256 / tile_size * map_entry_size;
+			const uint bg_height = 256 << (bgcnt[bg].screen_size >> 1); /* 0 => 256; 1 => 256; 2 => 512; 3 => 512 */
+			const uint bg_tile_index_y = ((bgvofs[bg] + v_counter) & 255) / tile_size;
+			uint tile_map_addr_base = bgcnt[bg].screen_base_block;
+			if (bg_height == 512 && ((bgvofs[bg] + v_counter) & 511) > 255) {
+				tile_map_addr_base += 2; /* SC0/SC1 => SC2/SC3 */
+			}
+			tile_map_addr_base *= 0x800;
+			return tile_map_addr_base + bg_tile_index_y * bytes_per_bg_map_area_row;
+		}();
+		uint bg_tile_index_x = (bghofs[bg] & (bg_width - 1)) / tile_size; /* note: possibly 0-63, but masked to 0-31 when needed */
 		uint dot = 0;
 
-		enum class TilePosition {
-			LeftEdge, Middle, RightEdge
-		};
-
-		auto FetchTile = [&] <TilePosition tile_pos> {
-			static constexpr int pixels_to_ignore_left = [&] {
-				if constexpr (tile_pos == TilePosition::LeftEdge) {
-					return bghofs[bg].offset % 8;
-				}
-				else {
-					return 0;
-				}
-			}();
-			static constexpr int pixels_to_ignore_right = [&] {
-				if constexpr (tile_pos == TilePosition::RightEdge) {
-					return 8 - pixels_to_ignore_left;
-				}
-				else {
-					return 0;
-				}
-			}();
-			if constexpr (tile_pos == TilePosition::RightEdge && pixels_to_ignore_right == 8) {
-				return;
+		auto FetchPushTile = [&](uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
+			uint tile_map_addr = tile_map_addr_base + map_entry_size * (bg_tile_index_x & 31);
+			if (bg_width == 512 && bg_tile_index_x > 31) {
+				tile_map_addr += 0x800; /* SC0/SC2 => SC1/SC3 */
 			}
-			const uint bg_map_addr = bg_map_base_addr + 2 * bg_tile_index_x;
-			const uint tile_num = (vram[bg_map_addr] | vram[bg_map_addr + 1] << 8) & 0x3FF;
-			const bool flip_x = vram[bg_map_addr + 1] & 4;
-			const uint delta_y = [&] {
-				const bool flip_y = vram[bg_map_addr + 1] & 8;
-				u8 delta_y = (ly + bgvofs[bg].offset) % 8;
-				if (flip_y) {
-					delta_y = 7 - delta_y;
-				}
-				return delta_y;
-			}();
-			uint tile_data_addr = bgcnt[bg].char_base_block * 0x4000; /* 0-0xC000 */
+			/* VRAM BG Screen Data Format (BG Map)
+				0-9   Tile Number     (0-1023) (a bit less in 256 color mode, because there'd be otherwise no room for the bg map)
+				10    Horizontal Flip (0=Normal, 1=Mirrored)
+				11    Vertical Flip   (0=Normal, 1=Mirrored)
+				12-15 Palette Number  (0-15)    (Not used in 256 color/1 palette mode) */
+			constexpr static uint col_size = 2;
+			const uint tile_num = vram[tile_map_addr] | vram[tile_map_addr + 1] << 8 & 0x300;
+			const bool flip_x = vram[tile_map_addr + 1] & 4;
+			const bool flip_y = vram[tile_map_addr + 1] & 8;
+			const uint tile_offset_y = flip_y ? 7 - (v_counter + bgvofs[bg]) % 8 : (v_counter + bgvofs[bg]) % 8;
+			uint tile_data_addr = bgcnt[bg].char_base_block * 0x4000;
 			/* 4-bit depth (16 colors, 16 palettes). Each tile occupies 32 bytes of memory, the first 4 bytes for the topmost row of the tile, and so on.
-			Each byte representing two dots, the lower 4 bits define the color for the left (!) dot, the upper 4 bits the color for the right dot. */
+				Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot. */
 			if (bgcnt[bg].palette_mode == 0) {
-				tile_data_addr += 32 * tile_num + 4 * delta_y;
-				u8 palette_number = vram[bg_map_addr + 1] >> 4;
-				const u8* base_palette_start = palette_ram.data() + 16 * palette_number;
-				for (int i = 0; i < 4; ++i, ++tile_data_addr) {
-					u8 right_col_id = vram[tile_data_addr] & 0xF;
-					u8 left_col_id = vram[tile_data_addr] >> 4;
-					u16 right_col, left_col;
-					std::memcpy(&right_col, base_palette_start + 2 * right_col_id, 2);
-					std::memcpy(&left_col, base_palette_start + 2 * left_col_id, 2);
-					current_scanline_bg_layers[bg][dot++] = left_col;
-					current_scanline_bg_layers[bg][dot++] = right_col;
-				}
-			}
-			/* 8-bit depth (256 colors, 1 palette). Each tile occupies 64 bytes of memory, the first 8 bytes for the topmost row of the tile, and so on.
-			Each byte selects the palette entry for each dot. */
-			else {
-				tile_data_addr += 64 * tile_num + 8 * delta_y;
-				auto PushPixel = [&](uint pixel_index) {
-					u8 palette_number = vram[tile_data_addr + pixel_index];
-					u16 col = palette_ram[palette_number] | palette_ram[palette_number + 1] << 8;
-					col &= 0x7FFF;
-					col |= (palette_number == 0) << 15;
-					current_scanline_bg_layers[bg][dot++] = std::bit_cast<ColorData>(col);
+				tile_data_addr += 32 * tile_num + 4 * tile_offset_y;
+				u8 palette_num = vram[tile_map_addr + 1] >> 4;
+				const u8* palette_start_ptr = palette_ram.data() + 16 * col_size * palette_num;
+				uint col_shift = (pixels_to_ignore_left & 1) ? 4 : 0; /* access lower nibble of byte if tile pixel index is even, else higher nibble. */
+				auto FetchPushPixel = [&](uint pixel_index) {
+					u8 col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
+					ColorData col;
+					std::memcpy(&col, palette_start_ptr + col_size * col_id, col_size);
+					col.transparent = col_id == 0;
+					bg_render[bg][dot++] = col;
 				};
 				if (flip_x) {
-					for (int i = 7 - pixels_to_ignore_right; i >= pixels_to_ignore_left; --i) {
-						PushPixel(i);
+					for (int i = 7 - pixels_to_ignore_right; i >= (int)pixels_to_ignore_left; --i, col_shift ^= 4) {
+						FetchPushPixel(i);
 					}
 				}
 				else {
-					for (int i = pixels_to_ignore_left; i < 8 - pixels_to_ignore_right; ++i) {
-						PushPixel(i);
+					for (int i = pixels_to_ignore_left; i < 8 - (int)pixels_to_ignore_right; ++i, col_shift ^= 4) {
+						FetchPushPixel(i);
 					}
 				}
 			}
-			bg_tile_index_x++;
-			bg_tile_index_x &= (bg_width - 1) / 8;
+			/* 8-bit depth (256 colors, 1 palette). Each tile occupies 64 bytes of memory, the first 8 bytes for the topmost row of the tile, etc..
+				Each byte selects the palette entry for each dot. */
+			else {
+				tile_data_addr += 64 * tile_num + 8 * tile_offset_y; /* TODO: tile_num can't be as high as 1023 in 256 col mode */
+				auto FetchPushPixel = [&](uint pixel_index) {
+					u8 col_id = vram[tile_data_addr + pixel_index];
+					ColorData col;
+					std::memcpy(&col, palette_ram.data() + col_size * col_id, col_size);
+					col.transparent = col_id == 0;
+					bg_render[bg][dot++] = col;
+				};
+				if (flip_x) {
+					for (int i = 7 - pixels_to_ignore_right; i >= (int)pixels_to_ignore_left; --i) {
+						FetchPushPixel(i);
+					}
+				}
+				else {
+					for (int i = pixels_to_ignore_left; i < 8 - (int)pixels_to_ignore_right; ++i) {
+						FetchPushPixel(i);
+					}
+				}
+			}
+			bg_tile_index_x = (bg_tile_index_x + 1) & ((bg_width - 1) / 8);
 		};
-
-		//FetchTile.template operator() < TilePosition::LeftEdge > ();
-		//for (int i = 0; i <= 28; ++i) {
-		//	FetchTile.template operator() < TilePosition::Middle > ();
-		//}
-		//FetchTile.template operator() < TilePosition::RightEdge > ();
+		/* The LCD being 240 pixels wide means 30 tiles to fetch if bghofs lands perfectly at the beginning of a tile. Else: 31 tiles. */
+		if (bghofs[bg] & 7) {
+			FetchPushTile(bghofs[bg] & 7, 0);
+			for (int i = 0; i < 29; ++i) {
+				FetchPushTile(0, 0);
+			}
+			FetchPushTile(0, 8 - (bghofs[bg] & 7));
+		}
+		else {
+			for (int i = 0; i < 30; ++i) {
+				FetchPushTile(0, 0);
+			}
+		}
 	}
 
 
@@ -701,7 +674,6 @@ namespace PPU
 			case Bus::ADDR_BLDALPHA:     eva = data & 0x1F; break;
 			case Bus::ADDR_BLDALPHA + 1: evb = data & 0x1F; break;
 			case Bus::ADDR_BLDY:         evy = data & 0x1F; break;
-			default: break;
 			}
 		};
 
@@ -748,13 +720,7 @@ namespace PPU
 			case Bus::ADDR_BLDCNT:       bldcnt = std::bit_cast<BLDCNT>(data); break;
 			case Bus::ADDR_BLDALPHA:     eva = data & 0x1F; evb = data >> 8 & 0x1F; break;
 			case Bus::ADDR_BLDY:         evy = data & 0x1F; break;
-			default: break;
 			}
-		};
-
-		auto WriteWord = [&](u32 addr, u32 data) {
-			WriteHalf(addr, data & 0xFFFF);
-			WriteHalf(addr + 2, data >> 16 & 0xFFFF);
 		};
 
 		if constexpr (sizeof(Int) == 1) {
@@ -764,7 +730,8 @@ namespace PPU
 			WriteHalf(addr, data);
 		}
 		if constexpr (sizeof(Int) == 4) {
-			WriteWord(addr, data);
+			WriteHalf(addr, data & 0xFFFF);
+			WriteHalf(addr + 2, data >> 16 & 0xFFFF);
 		}
 	}
 

@@ -248,7 +248,7 @@ namespace PPU
 	uint dot;
 	uint framebuffer_index;
 
-	std::array<std::array<ColorData, dots_per_line>, 4> current_scanline_bg_layers;
+	std::array<std::array<ColorData, dots_per_line>, 4> bg_render;
 
 	std::array<u8, 0x400> oam;
 	std::array<u8, 0x400> palette_ram;
