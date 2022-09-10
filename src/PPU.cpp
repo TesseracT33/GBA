@@ -467,6 +467,97 @@ namespace PPU
 	}
 
 
+	template<void(*RenderFun)(), bool vertical_mosaic>
+	void RenderBackground(uint bg)
+	{
+		if (GetBit(dispcnt.screen_display_bg, bg)) {
+			if (!vertical_mosaic || !bgcnt[bg].mosaic_enable) {
+				RenderFun();
+			}
+		}
+		else {
+			RenderTransparentBackground(bg);
+		}
+	}
+
+
+	template<void(*RenderFun)(uint), bool vertical_mosaic>
+	void RenderBackground(uint bg)
+	{
+		if (GetBit(dispcnt.screen_display_bg, bg)) {
+			if (!vertical_mosaic || !bgcnt[bg].mosaic_enable) {
+				RenderFun(bg);
+			}
+		}
+		else {
+			RenderTransparentBackground(bg);
+		}
+	}
+
+
+	template<bool vertical_mosaic>
+	void RenderBackgrounds()
+	{
+		switch (dispcnt.bg_mode) {
+		case 0:
+			for (uint bg = 0; bg < 4; ++bg) {
+				RenderBackground<ScanlineBackgroundTextMode, vertical_mosaic>(bg);
+			}
+			break;
+
+		case 1:
+			RenderBackground<ScanlineBackgroundTextMode, vertical_mosaic>(0);
+			RenderBackground<ScanlineBackgroundTextMode, vertical_mosaic>(1);
+			RenderBackground<ScanlineBackgroundRotateScaleMode, vertical_mosaic>(2);
+			RenderTransparentBackground(3);
+			break;
+
+		case 2:
+			RenderTransparentBackground(0);
+			RenderTransparentBackground(1);
+			RenderBackground<ScanlineBackgroundRotateScaleMode, vertical_mosaic>(2);
+			RenderBackground<ScanlineBackgroundRotateScaleMode, vertical_mosaic>(3);
+			break;
+
+		case 3:
+			RenderTransparentBackground(0);
+			RenderTransparentBackground(1);
+			RenderTransparentBackground(3);
+			RenderBackground<ScanlineBackgroundBitmapMode3, vertical_mosaic>(2);
+			break;
+
+		case 4:
+			RenderTransparentBackground(0);
+			RenderTransparentBackground(1);
+			RenderTransparentBackground(3);
+			RenderBackground<ScanlineBackgroundBitmapMode4, vertical_mosaic>(2);
+			break;
+
+		case 5:
+			RenderTransparentBackground(0);
+			RenderTransparentBackground(1);
+			RenderTransparentBackground(3);
+			RenderBackground<ScanlineBackgroundBitmapMode5, vertical_mosaic>(2);
+			break;
+
+		case 6:
+		case 7:
+			break;
+
+		default:
+			std::unreachable();
+		}
+	}
+
+
+	void RenderTransparentBackground(uint bg)
+	{
+		for (uint dot = 0; dot < dots_per_line; ++dot) {
+			bg_render[bg][dot] = transparent_bg_pixel;
+		}
+	}
+
+
 	void Scanline()
 	{
 		if (dispcnt.forced_blank) {
@@ -476,61 +567,19 @@ namespace PPU
 			return;
 		}
 
-		auto RenderTransparentBg = [&](uint bg) {
-			for (uint dot = 0; dot < dots_per_line; ++dot) {
-				bg_render[bg][dot] = transparent_bg_pixel;
+		if (mosaic.bg_v_size == 0) {
+			RenderBackgrounds<false>();
+		}
+		else {
+			if (mosaic_v_counter++ == 0) {
+				RenderBackgrounds<false>();
 			}
-		};
-
-		switch (dispcnt.bg_mode) {
-		case 0:
-			dispcnt.screen_display_bg0 ? ScanlineBackgroundTextMode(0) : RenderTransparentBg(0);
-			dispcnt.screen_display_bg1 ? ScanlineBackgroundTextMode(1) : RenderTransparentBg(1);
-			dispcnt.screen_display_bg2 ? ScanlineBackgroundTextMode(2) : RenderTransparentBg(2);
-			dispcnt.screen_display_bg3 ? ScanlineBackgroundTextMode(3) : RenderTransparentBg(3);
-			break;
-
-		case 1:
-			dispcnt.screen_display_bg0 ? ScanlineBackgroundTextMode(0) : RenderTransparentBg(0);
-			dispcnt.screen_display_bg1 ? ScanlineBackgroundTextMode(1) : RenderTransparentBg(1);
-			dispcnt.screen_display_bg2 ? ScanlineBackgroundRotateScaleMode(2) : RenderTransparentBg(2);
-			RenderTransparentBg(3);
-			break;
-
-		case 2:
-			RenderTransparentBg(0);
-			RenderTransparentBg(1);
-			dispcnt.screen_display_bg2 ? ScanlineBackgroundRotateScaleMode(2) : RenderTransparentBg(2);
-			dispcnt.screen_display_bg3 ? ScanlineBackgroundRotateScaleMode(3) : RenderTransparentBg(3);
-			break;
-
-		case 3:
-			RenderTransparentBg(0);
-			RenderTransparentBg(1);
-			RenderTransparentBg(3);
-			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode3() : RenderTransparentBg(2);
-			break;
-
-		case 4:
-			RenderTransparentBg(0);
-			RenderTransparentBg(1);
-			RenderTransparentBg(3);
-			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode4() : RenderTransparentBg(2);
-			break;
-
-		case 5:
-			RenderTransparentBg(0);
-			RenderTransparentBg(1);
-			RenderTransparentBg(3);
-			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode5() : RenderTransparentBg(2);
-			break;
-
-		case 6:
-		case 7:
-			break;
-
-		default:
-			std::unreachable();
+			else {
+				RenderBackgrounds<true>();
+			}
+			if (mosaic_v_counter == mosaic.bg_v_size - 1) {
+				mosaic_v_counter = 0;
+			}
 		}
 
 		if (dispcnt.screen_display_obj) {
@@ -568,6 +617,7 @@ namespace PPU
 			tile_map_addr_base *= 0x800;
 			return tile_map_addr_base + bg_tile_index_y * bytes_per_bg_map_area_row;
 		}();
+		const uint mosaic_incr = bgcnt[bg].mosaic_enable ? mosaic.bg_h_size + 1 : 1; /* TODO */
 		uint bg_tile_index_x = (bghofs[bg] & (bg_width - 1)) / tile_size; /* note: possibly 0-63, but masked to 0-31 when needed */
 		uint dot = 0;
 
@@ -656,11 +706,14 @@ namespace PPU
 	{
 		constexpr static uint col_size = 2;
 		constexpr static uint bytes_per_scanline = total_num_lines * col_size;
-		for (uint dot = 0; dot < dots_per_line; ++dot) {
+		const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
+		for (uint dot = 0; dot < dots_per_line; ) {
 			BgColorData col;
 			std::memcpy(&col, vram.data() + v_counter * bytes_per_scanline + dot * col_size, col_size);
 			col.transparent = false; /* The two bytes directly define one of the 32768 colors (without using palette data, and thus not supporting a 'transparent' BG color) */
-			bg_render[2][dot] = col;
+			for (uint i = 0; i < mosaic_incr; ++i) {
+				bg_render[2][dot++] = col;
+			}
 		}
 	}
 
@@ -669,13 +722,16 @@ namespace PPU
 	{
 		constexpr static uint col_size = 2;
 		constexpr static uint bytes_per_scanline = total_num_lines;
+		const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
 		const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
-		for (uint dot = 0; dot < dots_per_line; ++dot) {
+		for (uint dot = 0; dot < dots_per_line; ) {
 			uint palette_index = vram[vram_frame_offset + v_counter * bytes_per_scanline + dot];
 			BgColorData col;
 			std::memcpy(&col, palette_ram.data() + palette_index * col_size, col_size);
 			col.transparent = palette_index == 0;
-			bg_render[2][dot] = col;
+			for (uint i = 0; i < mosaic_incr; ++i) {
+				bg_render[2][dot++] = col;
+			}
 		}
 	}
 
@@ -685,19 +741,22 @@ namespace PPU
 		/* TODO: can objects be drawn around the background? Probably yes */
 		constexpr static uint col_size = 2;
 		constexpr static uint bytes_per_scanline = total_num_lines * col_size;
+		const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
 		const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
 		uint dot = 0;
-		for (; dot < 40; ++dot) {
-			bg_render[2][dot] = transparent_bg_pixel;
+		while (dot < 40) {
+			bg_render[2][dot++] = transparent_bg_pixel;
 		}
-		for (; dot < 200; ++dot) {
+		while (dot < 200) {
 			BgColorData col;
 			std::memcpy(&col, vram.data() + vram_frame_offset + v_counter * bytes_per_scanline + dot * col_size, col_size);
 			col.transparent = false; /* The two bytes directly define one of the 32768 colors (without using palette data, and thus not supporting a 'transparent' BG color) */
-			bg_render[2][dot] = col;
+			for (uint i = 0; i < mosaic_incr; ++i) {
+				bg_render[2][dot++] = col;
+			}
 		}
-		for (; dot < 240; ++dot) {
-			bg_render[2][dot] = transparent_bg_pixel;
+		while (dot < 240) {
+			bg_render[2][dot++] = transparent_bg_pixel;
 		}
 	}
 
