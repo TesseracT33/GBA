@@ -23,80 +23,219 @@ namespace PPU
 	}
 
 
-	void BlendBackgrounds()
+	void BlendLayers()
 	{
-		/* Sort backgrounds after priority */
-		std::array<ColorData*, 4> bg_color_data_begin_ptrs = {
-			bg_render[0].data(),
-			bg_render[1].data(),
-			bg_render[2].data(),
-			bg_render[3].data()
+		const bool win0_enable = dispcnt.win0_display;
+		const bool win1_enable = dispcnt.win1_display;
+		const bool obj_win_enable = dispcnt.obj_win_display;
+		const bool scanline_falls_on_win0 = win0_enable && v_counter >= winv_y1[0] && v_counter < winv_y2[0];
+		const bool scanline_falls_on_win1 = win1_enable && v_counter >= winv_y1[1] && v_counter < winv_y2[1];
+		bool win0_active = false;
+		bool win1_active = false;
+		bool obj_win_active = false;
+
+		auto GetNextTopmostOpaqueBgLayer = [&, skip = 0](uint dot) mutable -> int {
+			auto it = std::find_if(bg_prio.begin() + skip, bg_prio.end(), [&](int bg) {
+				++skip;
+				if (bg_render[bg][dot].transparent) {
+					return false;
+				}
+				if (win0_active) {
+					return GetBit(winin.window0_bg_enable, bg);
+				}
+				if (win1_active) {
+					return GetBit(winin.window1_bg_enable, bg);
+				}
+				if (obj_win_active) {
+					return GetBit(winout.obj_window_bg_enable, bg);
+				}
+				if (win0_enable || win1_enable || obj_win_enable) {
+					return GetBit(winout.outside_bg_enable, bg);
+				}
+				return true;
+			});
+			return it != bg_prio.end() ? *it : 4;
 		};
-		for (int i = 0; i < 4; ++i) {
-			for (int j = 0; j < 3; ++j) {
-				if (bgcnt[j].bg_priority < bgcnt[j + 1].bg_priority) {
-					std::swap(bg_color_data_begin_ptrs[j], bg_color_data_begin_ptrs[j + 1]);
-				}
-			}
-		}
-		/* Blend backgrounds, pixel by pixel */
+
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
-			/* Find the non-transparent layer with highest priority */
-			int layer = 0;
-			for (; layer < 4; ++layer) {
-				if (!bg_color_data_begin_ptrs[layer][dot].transparent) {
-					break;
+			if (scanline_falls_on_win0) {
+				win0_active = dot >= winh_x1[0] && dot < winh_x2[0];
+			}
+			if (scanline_falls_on_win1) {
+				win1_active = dot >= winh_x1[1] && dot < winh_x2[1];
+			}
+			if (obj_win_enable) {
+				obj_win_active = obj_render[dot].obj_mode == obj_mode_obj_window_mask && !obj_render[dot].transparent;
+			}
+			int topmost_opaque_bg = GetNextTopmostOpaqueBgLayer(dot);
+			int fx_1st_target_index;
+			RGB rgb_1st_layer;
+			if (obj_win_active) {
+				/* objects are not displayed */
+				/* TODO: are objects displayed if win0 or win1 are also active? */
+				if (topmost_opaque_bg < 4) {
+					fx_1st_target_index = topmost_opaque_bg;
+					rgb_1st_layer = bg_render[topmost_opaque_bg][dot].ToRGB();
+				}
+				else {
+					fx_1st_target_index = fx_backdrop_index;
+					rgb_1st_layer = GetBackdropColor().ToRGB();
+				}
+				bool special_effect_enable = [&] {
+					if (bldcnt.color_special_effect == fx_disable_mask) return false;
+					if (win0_active) return bool(winin.window0_color_special_effect);
+					if (win1_active) return bool(winin.window1_color_special_effect);
+					return bool(winout.obj_window_color_special_effect);
+				}();
+				if (special_effect_enable) {
+					const u16 bldcnt_u16 = std::bit_cast<u16>(bldcnt);
+					switch (bldcnt.color_special_effect) {
+					case fx_alpha_blending_mask: { /* 1st+2nd Target mixed */
+						int second_topmost_opaque_bg = GetNextTopmostOpaqueBgLayer(dot);
+						int fx_2nd_target_index;
+						RGB rgb_2nd_layer;
+						if (second_topmost_opaque_bg < 4) {
+							fx_2nd_target_index = second_topmost_opaque_bg;
+							rgb_2nd_layer = bg_render[second_topmost_opaque_bg][dot].ToRGB();
+						}
+						else {
+							fx_2nd_target_index = fx_backdrop_index;
+							rgb_2nd_layer = GetBackdropColor().ToRGB();
+						}
+						if (GetBit(bldcnt_u16, fx_1st_target_index) &&
+							GetBit(bldcnt_u16, fx_2nd_target_index + 8)) {
+							rgb_1st_layer = AlphaBlend(rgb_1st_layer, rgb_2nd_layer);
+						}
+						break;
+					}
+
+					case fx_brightness_increase_mask: /* 1st Target becomes whiter */
+						if (GetBit(bldcnt_u16, fx_1st_target_index)) {
+							rgb_1st_layer = BrightnessIncrease(rgb_1st_layer);
+						}
+						break;
+
+					case fx_brightness_decrease_mask: /* 1st Target becomes blacker */
+						if (GetBit(bldcnt_u16, fx_1st_target_index)) {
+							rgb_1st_layer = BrightnessDecrease(rgb_1st_layer);
+						}
+						break;
+
+					default:
+						std::unreachable();
+					}
 				}
 			}
-			if (layer == 4) {
-				/* No non-transparent layer found */
-				PushPixel(0xFF, 0xFF, 0xFF);
-				continue;
-			}
-			int topmost_layer = layer;
-			RGB rgb = bg_color_data_begin_ptrs[topmost_layer][dot].ToRGB();
-			if (bldcnt.color_special_effect != 0) {
-				u16 bldcnt_u16 = std::bit_cast<u16>(bldcnt);
-				switch (bldcnt.color_special_effect) {
-				case 1: /* Alpha Blending (1st+2nd Target mixed) */
-					if (bldcnt_u16 & (1 << topmost_layer | 1 << (topmost_layer + 8))) {
-						/* Find the non-transparent layer with 2nd highest priority */
-						int layer = 0;
-						for (; layer < 4; ++layer) {
-							if (layer != topmost_layer && !bg_color_data_begin_ptrs[layer][dot].transparent) {
-								break;
+			else {
+				/* objects are displayed */
+				auto ChooseBgOrObj = [&](int bg_index, bool& obj_chosen, RGB& rgb, int& fx_target_index) -> void {
+					if (obj_render[dot].transparent) {
+						obj_chosen = false;
+						if (bg_index < 4) {
+							fx_target_index = bg_index;
+							rgb = bg_render[bg_index][dot].ToRGB();
+						}
+						else {
+							fx_target_index = fx_backdrop_index;
+							rgb = GetBackdropColor().ToRGB();
+						}
+					}
+					else if (bg_index == 4 || bgcnt[bg_index].bg_priority >= obj_render[dot].priority) {
+						obj_chosen = true;
+						fx_target_index = fx_obj_index;
+						rgb = obj_render[dot].ToRGB();
+					}
+					else {
+						obj_chosen = false;
+						fx_target_index = bg_index;
+						rgb = bg_render[bg_index][dot].ToRGB();
+					}
+				};
+
+				bool top_layer_is_obj;
+				ChooseBgOrObj(topmost_opaque_bg, top_layer_is_obj, rgb_1st_layer, fx_1st_target_index);
+
+				if (obj_render[dot].obj_mode == obj_mode_semi_transparent_mask) {
+					/* OBJs that are defined as 'Semi-Transparent' in OAM memory are always selected as 1st Target (regardless of BLDCNT Bit 4),
+						and are always using Alpha Blending mode (regardless of BLDCNT Bit 6-7). */
+					int fx_2nd_target_index;
+					RGB rgb_2nd_layer;
+					if (top_layer_is_obj) {
+						if (topmost_opaque_bg < 4) {
+							fx_2nd_target_index = topmost_opaque_bg;
+							rgb_2nd_layer = bg_render[topmost_opaque_bg][dot].ToRGB();
+						}
+						else {
+							fx_2nd_target_index = fx_backdrop_index;
+							rgb_2nd_layer = GetBackdropColor().ToRGB();
+						}
+						if (GetBit(std::bit_cast<u16>(bldcnt), fx_2nd_target_index)) {
+							rgb_1st_layer = AlphaBlend(rgb_1st_layer, rgb_2nd_layer);
+						}
+					}
+					else {
+						bool second_layer_is_obj;
+						ChooseBgOrObj(GetNextTopmostOpaqueBgLayer(dot), second_layer_is_obj, rgb_2nd_layer, fx_2nd_target_index);
+						if (second_layer_is_obj) {
+							if (GetBit(std::bit_cast<u16>(bldcnt), fx_1st_target_index + 8)) {
+								rgb_2nd_layer = AlphaBlend(rgb_2nd_layer, rgb_1st_layer);
 							}
 						}
-						RGB second_rgb = [&] {
-							if (layer == 4) {
-								// TODO
-								return bg_color_data_begin_ptrs[layer][dot].ToRGB();
+					}
+				}
+				else {
+					bool special_effect_enable = [&] {
+						if (bldcnt.color_special_effect == fx_disable_mask) return false;
+						if (win0_active)                return bool(winin.window0_color_special_effect);
+						if (win1_active)                return bool(winin.window1_color_special_effect);
+						if (win0_enable || win1_enable) return bool(winout.outside_color_special_effect);
+						return true;
+					}();
+					if (special_effect_enable) {
+						const u16 bldcnt_u16 = std::bit_cast<u16>(bldcnt);
+						switch (bldcnt.color_special_effect) {
+						case fx_alpha_blending_mask: { /* 1st+2nd Target mixed */
+							int fx_2nd_target_index;
+							RGB rgb_2nd_layer;
+							if (top_layer_is_obj) {
+								if (topmost_opaque_bg < 4) {
+									fx_2nd_target_index = topmost_opaque_bg;
+									rgb_2nd_layer = bg_render[topmost_opaque_bg][dot].ToRGB();
+								}
+								else {
+									fx_2nd_target_index = fx_backdrop_index;
+									rgb_2nd_layer = GetBackdropColor().ToRGB();
+								}
 							}
 							else {
-								return bg_color_data_begin_ptrs[layer][dot].ToRGB();
+								ChooseBgOrObj(GetNextTopmostOpaqueBgLayer(dot), top_layer_is_obj, rgb_2nd_layer, fx_2nd_target_index);
 							}
-						}();
-						rgb = AlphaBlend(rgb, second_rgb);
-					}
-					break;
+							if (GetBit(bldcnt_u16, fx_1st_target_index) &&
+								GetBit(bldcnt_u16, fx_2nd_target_index + 8)) {
+								rgb_1st_layer = AlphaBlend(rgb_1st_layer, rgb_2nd_layer);
+							}
+							break;
+						}
 
-				case 2: /* Brightness Increase (1st Target becomes whiter) */
-					if (bldcnt_u16 & 1 << topmost_layer) {
-						rgb = BrightnessIncrease(rgb);
-					}
-					break;
+						case fx_brightness_increase_mask: /* 1st Target becomes whiter */
+							if (GetBit(bldcnt_u16, fx_1st_target_index)) {
+								rgb_1st_layer = BrightnessIncrease(rgb_1st_layer);
+							}
+							break;
 
-				case 3: /* Brightness Decrease (1st Target becomes blacker) */
-					if (bldcnt_u16 & 1 << topmost_layer) {
-						rgb = BrightnessDecrease(rgb);
-					}
-					break;
+						case fx_brightness_decrease_mask: /* 1st Target becomes blacker */
+							if (GetBit(bldcnt_u16, fx_1st_target_index)) {
+								rgb_1st_layer = BrightnessDecrease(rgb_1st_layer);
+							}
+							break;
 
-				default:
-					std::unreachable();
+						default:
+							std::unreachable();
+						}
+					}
 				}
 			}
-			PushPixel(rgb);
+			PushPixel(rgb_1st_layer);
 		}
 	}
 
@@ -121,7 +260,16 @@ namespace PPU
 	}
 
 
-	u8 GetObjectWidth(ObjectData obj_data)
+	BgColorData GetBackdropColor()
+	{
+		BgColorData col;
+		std::memcpy(&col, palette_ram.data(), sizeof(BgColorData));
+		col.transparent = false;
+		return col;
+	}
+
+
+	u8 GetObjectWidth(ObjData obj_data)
 	{
 		return u8((1 + obj_data.double_size_obj_disable) *
 			size_x[obj_data.obj_size][obj_data.obj_shape]);
@@ -148,10 +296,9 @@ namespace PPU
 			std::memset(&bgy[i], 0, sizeof(bgy[i]));
 			std::memset(&winh_x1[i], 0, sizeof(winh_x1[i]));
 			std::memset(&winh_x2[i], 0, sizeof(winh_x2[i]));
-			std::memset(&winv_x1[i], 0, sizeof(winv_x1[i]));
-			std::memset(&winv_x2[i], 0, sizeof(winv_x2[i]));
+			std::memset(&winv_y1[i], 0, sizeof(winv_y1[i]));
+			std::memset(&winv_y2[i], 0, sizeof(winv_y2[i]));
 		}
-
 		std::memset(&winin, 0, sizeof(winin));
 		std::memset(&winout, 0, sizeof(winout));
 		std::memset(&mosaic, 0, sizeof(mosaic));
@@ -224,11 +371,18 @@ namespace PPU
 	}
 
 
-	void PushPixel(ColorData color_data)
+	void PushPixel(auto color_data)
 	{
-		framebuffer[framebuffer_index++] = color_data.r;
-		framebuffer[framebuffer_index++] = color_data.g;
-		framebuffer[framebuffer_index++] = color_data.b;
+		if (color_data.transparent) {
+			framebuffer[framebuffer_index++] = 0xFF;
+			framebuffer[framebuffer_index++] = 0xFF;
+			framebuffer[framebuffer_index++] = 0xFF;
+		}
+		else {
+			framebuffer[framebuffer_index++] = color_data.r;
+			framebuffer[framebuffer_index++] = color_data.g;
+			framebuffer[framebuffer_index++] = color_data.b;
+		}
 	}
 
 
@@ -324,7 +478,7 @@ namespace PPU
 
 		auto RenderTransparentBg = [&](uint bg) {
 			for (uint dot = 0; dot < dots_per_line; ++dot) {
-				bg_render[bg][dot] = transparent_pixel;
+				bg_render[bg][dot] = transparent_bg_pixel;
 			}
 		};
 
@@ -353,22 +507,22 @@ namespace PPU
 		case 3:
 			RenderTransparentBg(0);
 			RenderTransparentBg(1);
-			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode3() : RenderTransparentBg(2);
 			RenderTransparentBg(3);
+			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode3() : RenderTransparentBg(2);
 			break;
 
 		case 4:
 			RenderTransparentBg(0);
 			RenderTransparentBg(1);
-			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode4() : RenderTransparentBg(2);
 			RenderTransparentBg(3);
+			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode4() : RenderTransparentBg(2);
 			break;
 
 		case 5:
 			RenderTransparentBg(0);
 			RenderTransparentBg(1);
-			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode5() : RenderTransparentBg(2);
 			RenderTransparentBg(3);
+			dispcnt.screen_display_bg2 ? ScanlineBackgroundBitmapMode5() : RenderTransparentBg(2);
 			break;
 
 		case 6:
@@ -384,11 +538,11 @@ namespace PPU
 		}
 		else {
 			for (uint dot = 0; dot < dots_per_line; ++dot) {
-				obj_render[dot] = transparent_pixel;
+				obj_render[dot] = transparent_obj_pixel;
 			}
 		}
 
-		BlendBackgrounds();
+		BlendLayers();
 	}
 
 
@@ -442,7 +596,7 @@ namespace PPU
 				uint col_shift = (pixels_to_ignore_left & 1) ? 4 : 0; /* access lower nibble of byte if tile pixel index is even, else higher nibble. */
 				auto FetchPushPixel = [&](uint pixel_index) {
 					u8 col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
-					ColorData col;
+					BgColorData col;
 					std::memcpy(&col, palette_start_ptr + col_size * col_id, col_size);
 					col.transparent = col_id == 0;
 					bg_render[bg][dot++] = col;
@@ -464,7 +618,7 @@ namespace PPU
 				tile_data_addr += 64 * tile_num + 8 * tile_offset_y; /* TODO: tile_num can't be as high as 1023 in 256 col mode */
 				auto FetchPushPixel = [&](uint pixel_index) {
 					u8 col_id = vram[tile_data_addr + pixel_index];
-					ColorData col;
+					BgColorData col;
 					std::memcpy(&col, palette_ram.data() + col_size * col_id, col_size);
 					col.transparent = col_id == 0;
 					bg_render[bg][dot++] = col;
@@ -503,7 +657,7 @@ namespace PPU
 		constexpr static uint col_size = 2;
 		constexpr static uint bytes_per_scanline = total_num_lines * col_size;
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
-			ColorData col;
+			BgColorData col;
 			std::memcpy(&col, vram.data() + v_counter * bytes_per_scanline + dot * col_size, col_size);
 			col.transparent = false; /* The two bytes directly define one of the 32768 colors (without using palette data, and thus not supporting a 'transparent' BG color) */
 			bg_render[2][dot] = col;
@@ -518,7 +672,7 @@ namespace PPU
 		const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
 			uint palette_index = vram[vram_frame_offset + v_counter * bytes_per_scanline + dot];
-			ColorData col;
+			BgColorData col;
 			std::memcpy(&col, palette_ram.data() + palette_index * col_size, col_size);
 			col.transparent = palette_index == 0;
 			bg_render[2][dot] = col;
@@ -534,16 +688,16 @@ namespace PPU
 		const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
 		uint dot = 0;
 		for (; dot < 40; ++dot) {
-			bg_render[2][dot] = transparent_pixel;
+			bg_render[2][dot] = transparent_bg_pixel;
 		}
 		for (; dot < 200; ++dot) {
-			ColorData col;
+			BgColorData col;
 			std::memcpy(&col, vram.data() + vram_frame_offset + v_counter * bytes_per_scanline + dot * col_size, col_size);
 			col.transparent = false; /* The two bytes directly define one of the 32768 colors (without using palette data, and thus not supporting a 'transparent' BG color) */
 			bg_render[2][dot] = col;
 		}
 		for (; dot < 240; ++dot) {
-			bg_render[2][dot] = transparent_pixel;
+			bg_render[2][dot] = transparent_bg_pixel;
 		}
 	}
 
@@ -552,13 +706,13 @@ namespace PPU
 	{
 		uint current_obj_oam_index = 0;
 
-		auto FetchSprite = [&](ObjectData obj_data) {
+		auto FetchSprite = [&](ObjData obj_data) {
 
 		};
 
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
 			/* Find sprite. The lower the oam index, the higher the priority. */
-			for (ObjectData obj_data : objects) {
+			for (ObjData obj_data : objects) {
 				if (obj_data.x_coord <= dot) {
 					auto obj_width = GetObjectWidth(obj_data);
 					if (obj_data.x_coord + obj_width > dot) {
@@ -627,9 +781,27 @@ namespace PPU
 				};
 				u8 obj_height = (1 + double_size_obj_disable) * obj_size_y[obj_size][obj_shape];
 				if (y_coord + obj_height > v_counter) {
-					ObjectData obj_data;
+					ObjData obj_data;
 					std::memcpy(&obj_data, oam.data() + oam_addr, 6);
 					objects.push_back(obj_data);
+				}
+			}
+		}
+	}
+
+
+	void SortBackgroundsAfterPriority()
+	{
+		std::array<BGCNT, 4> bgcnt_copy = bgcnt;
+		/* bg_priority: 0=highest; 3=lowest. If two BGs have the same prio, the one with the lower index takes prio. */
+		for (int i = 0; i < 4; ++i) {
+			int max_prio = 3;
+			int max_prio_index = 4;
+		}
+		for (int i = 0; i < 4; ++i) {
+			for (int j = 0; j < 3; ++j) {
+				if (bgcnt[j].bg_priority >= bgcnt[j + 1].bg_priority) {
+					std::swap(bg_prio[j], bg_prio[j + 1]);
 				}
 			}
 		}
@@ -661,13 +833,13 @@ namespace PPU
 			case Bus::ADDR_GREEN_SWAP:   green_swap = data & 1; break;
 			case Bus::ADDR_DISPSTAT:     SetByte(dispstat, 0, data); break;
 			case Bus::ADDR_DISPSTAT + 1: SetByte(dispstat, 1, data); break;
-			case Bus::ADDR_BG0CNT:       SetByte(bgcnt[0], 0, data); break;
+			case Bus::ADDR_BG0CNT:       SetByte(bgcnt[0], 0, data); SortBackgroundsAfterPriority(); break;
 			case Bus::ADDR_BG0CNT + 1:   SetByte(bgcnt[0], 1, data); break;
-			case Bus::ADDR_BG1CNT:       SetByte(bgcnt[1], 0, data); break;
+			case Bus::ADDR_BG1CNT:       SetByte(bgcnt[1], 0, data); SortBackgroundsAfterPriority(); break;
 			case Bus::ADDR_BG1CNT + 1:   SetByte(bgcnt[1], 1, data); break;
-			case Bus::ADDR_BG2CNT:       SetByte(bgcnt[2], 0, data); break;
+			case Bus::ADDR_BG2CNT:       SetByte(bgcnt[2], 0, data); SortBackgroundsAfterPriority(); break;
 			case Bus::ADDR_BG2CNT + 1:   SetByte(bgcnt[2], 1, data); break;
-			case Bus::ADDR_BG3CNT:       SetByte(bgcnt[3], 0, data); break;
+			case Bus::ADDR_BG3CNT:       SetByte(bgcnt[3], 0, data); SortBackgroundsAfterPriority(); break;
 			case Bus::ADDR_BG3CNT + 1:   SetByte(bgcnt[3], 1, data); break;
 			case Bus::ADDR_BG0HOFS:      SetByte(bghofs[0], 0, data); break;
 			case Bus::ADDR_BG0HOFS + 1:  SetByte(bghofs[0], 1, data & 1); break;
@@ -721,10 +893,10 @@ namespace PPU
 			case Bus::ADDR_WIN0H + 1:    winh_x1[0] = data; break;
 			case Bus::ADDR_WIN1H:        winh_x2[1] = data; break;
 			case Bus::ADDR_WIN1H + 1:    winh_x1[1] = data; break;
-			case Bus::ADDR_WIN0V:        winv_x2[0] = data; break;
-			case Bus::ADDR_WIN0V + 1:    winv_x1[0] = data; break;
-			case Bus::ADDR_WIN1V:        winv_x2[1] = data; break;
-			case Bus::ADDR_WIN1V + 1:    winv_x1[1] = data; break;
+			case Bus::ADDR_WIN0V:        winv_y2[0] = data; break;
+			case Bus::ADDR_WIN0V + 1:    winv_y1[0] = data; break;
+			case Bus::ADDR_WIN1V:        winv_y2[1] = data; break;
+			case Bus::ADDR_WIN1V + 1:    winv_y1[1] = data; break;
 			case Bus::ADDR_WININ:        SetByte(winin, 0, data); break;
 			case Bus::ADDR_WININ + 1:    SetByte(winin, 1, data); break;
 			case Bus::ADDR_WINOUT:       SetByte(winout, 0, data); break;
@@ -741,47 +913,47 @@ namespace PPU
 
 		auto WriteHalf = [](u32 addr, u16 data) {
 			switch (addr) {
-			case Bus::ADDR_DISPCNT:      dispcnt = std::bit_cast<DISPCNT>(data); break;
-			case Bus::ADDR_GREEN_SWAP:   green_swap = data & 1; break;
-			case Bus::ADDR_DISPSTAT:     dispstat = std::bit_cast<DISPSTAT>(data); break;
-			case Bus::ADDR_BG0CNT:       bgcnt[0] = std::bit_cast<BGCNT>(data); break;
-			case Bus::ADDR_BG1CNT:       bgcnt[1] = std::bit_cast<BGCNT>(data); break;
-			case Bus::ADDR_BG2CNT:       bgcnt[2] = std::bit_cast<BGCNT>(data); break;
-			case Bus::ADDR_BG3CNT:       bgcnt[3] = std::bit_cast<BGCNT>(data); break;
-			case Bus::ADDR_BG0HOFS:      bghofs[0] = data & 0x1FF; break;
-			case Bus::ADDR_BG0VOFS:      bgvofs[0] = data & 0x1FF; break;
-			case Bus::ADDR_BG1HOFS:      bghofs[1] = data & 0x1FF; break;
-			case Bus::ADDR_BG1VOFS:      bgvofs[1] = data & 0x1FF; break;
-			case Bus::ADDR_BG2HOFS:      bghofs[2] = data & 0x1FF; break;
-			case Bus::ADDR_BG2VOFS:      bgvofs[2] = data & 0x1FF; break;
-			case Bus::ADDR_BG3HOFS:      bghofs[3] = data & 0x1FF; break;
-			case Bus::ADDR_BG3VOFS:      bgvofs[3] = data & 0x1FF; break;
-			case Bus::ADDR_BG2PA:        bgpa[0] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG2PB:        bgpb[0] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG2PC:        bgpc[0] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG2PD:        bgpd[0] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG2X:         SetByte(bgx[0], 0, data & 0xFF); SetByte(bgx[0], 1, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG2X + 2:     SetByte(bgx[0], 2, data & 0xFF); SetByte(bgx[0], 3, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG2Y:         SetByte(bgy[0], 0, data & 0xFF); SetByte(bgy[0], 1, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG2Y + 2:     SetByte(bgy[0], 2, data & 0xFF); SetByte(bgy[0], 3, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG3PA:        bgpa[1] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG3PB:        bgpb[1] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG3PC:        bgpc[1] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG3PD:        bgpd[1] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG3X:         SetByte(bgx[1], 0, data & 0xFF); SetByte(bgx[1], 1, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG3X + 2:     SetByte(bgx[1], 2, data & 0xFF); SetByte(bgx[1], 3, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG3Y:         SetByte(bgy[1], 0, data & 0xFF); SetByte(bgy[1], 1, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG3Y + 2:     SetByte(bgy[1], 2, data & 0xFF); SetByte(bgy[1], 3, data >> 8 & 0xFF); break;
-			case Bus::ADDR_WIN0H:        winh_x2[0] = data & 0xFF; winh_x1[0] = data >> 8 & 0xFF; break;
-			case Bus::ADDR_WIN1H:        winh_x2[1] = data & 0xFF; winh_x1[1] = data >> 8 & 0xFF; break;
-			case Bus::ADDR_WIN0V:        winv_x2[0] = data & 0xFF; winv_x1[0] = data >> 8 & 0xFF; break;
-			case Bus::ADDR_WIN1V:        winv_x2[1] = data & 0xFF; winv_x1[1] = data >> 8 & 0xFF; break;
-			case Bus::ADDR_WININ:        winin = std::bit_cast<WININ>(data); break;
-			case Bus::ADDR_WINOUT:       winout = std::bit_cast<WINOUT>(data); break;
-			case Bus::ADDR_MOSAIC:       mosaic = std::bit_cast<MOSAIC>(data); break;
-			case Bus::ADDR_BLDCNT:       bldcnt = std::bit_cast<BLDCNT>(data); break;
-			case Bus::ADDR_BLDALPHA:     eva = data & 0x1F; evb = data >> 8 & 0x1F; break;
-			case Bus::ADDR_BLDY:         evy = data & 0x1F; break;
+			case Bus::ADDR_DISPCNT:    dispcnt = std::bit_cast<DISPCNT>(data); break;
+			case Bus::ADDR_GREEN_SWAP: green_swap = data & 1; break;
+			case Bus::ADDR_DISPSTAT:   dispstat = std::bit_cast<DISPSTAT>(data); break;
+			case Bus::ADDR_BG0CNT:     bgcnt[0] = std::bit_cast<BGCNT>(data); SortBackgroundsAfterPriority(); break;
+			case Bus::ADDR_BG1CNT:     bgcnt[1] = std::bit_cast<BGCNT>(data); SortBackgroundsAfterPriority(); break;
+			case Bus::ADDR_BG2CNT:     bgcnt[2] = std::bit_cast<BGCNT>(data); SortBackgroundsAfterPriority(); break;
+			case Bus::ADDR_BG3CNT:     bgcnt[3] = std::bit_cast<BGCNT>(data); SortBackgroundsAfterPriority(); break;
+			case Bus::ADDR_BG0HOFS:    bghofs[0] = data & 0x1FF; break;
+			case Bus::ADDR_BG0VOFS:    bgvofs[0] = data & 0x1FF; break;
+			case Bus::ADDR_BG1HOFS:    bghofs[1] = data & 0x1FF; break;
+			case Bus::ADDR_BG1VOFS:    bgvofs[1] = data & 0x1FF; break;
+			case Bus::ADDR_BG2HOFS:    bghofs[2] = data & 0x1FF; break;
+			case Bus::ADDR_BG2VOFS:    bgvofs[2] = data & 0x1FF; break;
+			case Bus::ADDR_BG3HOFS:    bghofs[3] = data & 0x1FF; break;
+			case Bus::ADDR_BG3VOFS:    bgvofs[3] = data & 0x1FF; break;
+			case Bus::ADDR_BG2PA:      bgpa[0] = std::bit_cast<BGP>(data); break;
+			case Bus::ADDR_BG2PB:      bgpb[0] = std::bit_cast<BGP>(data); break;
+			case Bus::ADDR_BG2PC:      bgpc[0] = std::bit_cast<BGP>(data); break;
+			case Bus::ADDR_BG2PD:      bgpd[0] = std::bit_cast<BGP>(data); break;
+			case Bus::ADDR_BG2X:       SetByte(bgx[0], 0, data & 0xFF); SetByte(bgx[0], 1, data >> 8 & 0xFF); break;
+			case Bus::ADDR_BG2X + 2:   SetByte(bgx[0], 2, data & 0xFF); SetByte(bgx[0], 3, data >> 8 & 0xFF); break;
+			case Bus::ADDR_BG2Y:       SetByte(bgy[0], 0, data & 0xFF); SetByte(bgy[0], 1, data >> 8 & 0xFF); break;
+			case Bus::ADDR_BG2Y + 2:   SetByte(bgy[0], 2, data & 0xFF); SetByte(bgy[0], 3, data >> 8 & 0xFF); break;
+			case Bus::ADDR_BG3PA:      bgpa[1] = std::bit_cast<BGP>(data); break;
+			case Bus::ADDR_BG3PB:      bgpb[1] = std::bit_cast<BGP>(data); break;
+			case Bus::ADDR_BG3PC:      bgpc[1] = std::bit_cast<BGP>(data); break;
+			case Bus::ADDR_BG3PD:      bgpd[1] = std::bit_cast<BGP>(data); break;
+			case Bus::ADDR_BG3X:       SetByte(bgx[1], 0, data & 0xFF); SetByte(bgx[1], 1, data >> 8 & 0xFF); break;
+			case Bus::ADDR_BG3X + 2:   SetByte(bgx[1], 2, data & 0xFF); SetByte(bgx[1], 3, data >> 8 & 0xFF); break;
+			case Bus::ADDR_BG3Y:       SetByte(bgy[1], 0, data & 0xFF); SetByte(bgy[1], 1, data >> 8 & 0xFF); break;
+			case Bus::ADDR_BG3Y + 2:   SetByte(bgy[1], 2, data & 0xFF); SetByte(bgy[1], 3, data >> 8 & 0xFF); break;
+			case Bus::ADDR_WIN0H:      winh_x2[0] = data & 0xFF; winh_x1[0] = data >> 8 & 0xFF; break;
+			case Bus::ADDR_WIN1H:      winh_x2[1] = data & 0xFF; winh_x1[1] = data >> 8 & 0xFF; break;
+			case Bus::ADDR_WIN0V:      winv_y2[0] = data & 0xFF; winv_y1[0] = data >> 8 & 0xFF; break;
+			case Bus::ADDR_WIN1V:      winv_y2[1] = data & 0xFF; winv_y1[1] = data >> 8 & 0xFF; break;
+			case Bus::ADDR_WININ:      winin = std::bit_cast<WININ>(data); break;
+			case Bus::ADDR_WINOUT:     winout = std::bit_cast<WINOUT>(data); break;
+			case Bus::ADDR_MOSAIC:     mosaic = std::bit_cast<MOSAIC>(data); break;
+			case Bus::ADDR_BLDCNT:     bldcnt = std::bit_cast<BLDCNT>(data); break;
+			case Bus::ADDR_BLDALPHA:   eva = data & 0x1F; evb = data >> 8 & 0x1F; break;
+			case Bus::ADDR_BLDY:       evy = data & 0x1F; break;
 			}
 		};
 

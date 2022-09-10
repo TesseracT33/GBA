@@ -8,6 +8,7 @@ import <bit>;
 import <cmath>;
 import <concepts>;
 import <cstring>;
+import <utility>;
 import <vector>;
 
 namespace PPU
@@ -33,7 +34,7 @@ namespace PPU
 		u8 r, g, b;
 	};
 
-	struct ColorData
+	struct BgColorData
 	{
 		u16 r : 5;
 		u16 g : 5;
@@ -42,7 +43,19 @@ namespace PPU
 		RGB ToRGB() const { return { u8(r), u8(g), u8(b) }; }
 	};
 
-	struct ObjectData
+	struct ObjColorData
+	{
+		u32 r : 5;
+		u32 g : 5;
+		u32 b : 5;
+		u32 transparent : 1;
+		u32 obj_mode : 2;
+		u32 priority : 2;
+		u32 : 12;
+		RGB ToRGB() const { return { u8(r), u8(g), u8(b) }; }
+	};
+
+	struct ObjData
 	{
 		u64 y_coord : 8;
 		u64 rotate_scale : 1;
@@ -64,14 +77,15 @@ namespace PPU
 	};
 
 	RGB AlphaBlend(RGB upper_pixel, RGB lower_pixel);
-	void BlendBackgrounds();
+	void BlendLayers();
 	RGB BrightnessDecrease(RGB pixel);
 	RGB BrightnessIncrease(RGB pixel);
-	u8 GetObjectWidth(ObjectData obj_data);
+	BgColorData GetBackdropColor();
+	u8 GetObjectWidth(ObjData obj_data);
 	void OnHBlank();
 	void OnHBlankSetFlag();
 	void OnNewScanline();
-	void PushPixel(ColorData color_data);
+	void PushPixel(auto color_data);
 	void PushPixel(RGB rgb);
 	void PushPixel(u8 r, u8 g, u8 b);
 	void ScanlineBackgroundRotateScaleMode(uint bg);
@@ -81,8 +95,18 @@ namespace PPU
 	void ScanlineBackgroundBitmapMode5();
 	void ScanlineObjects();
 	void ScanOam();
+	void SortBackgroundsAfterPriority();
 	void UpdateRotateScalingRegisters();
 
+	constexpr u16 fx_obj_index = 4;
+	constexpr u16 fx_backdrop_index = 5;
+	constexpr u16 fx_disable_mask = 0;
+	constexpr u16 fx_alpha_blending_mask = 1;
+	constexpr u16 fx_brightness_increase_mask = 2;
+	constexpr u16 fx_brightness_decrease_mask = 3;
+	constexpr u16 obj_mode_normal_mask = 0;
+	constexpr u16 obj_mode_semi_transparent_mask = 1;
+	constexpr u16 obj_mode_obj_window_mask = 2;
 	constexpr uint cycles_per_line = 1232;
 	constexpr uint cycles_until_hblank = 960;
 	constexpr uint cycles_until_set_hblank_flag = 1006;
@@ -91,7 +115,8 @@ namespace PPU
 	constexpr uint lines_until_vblank = 160;
 	constexpr uint max_objects = 128;
 	constexpr uint total_num_lines = 228;
-	constexpr ColorData transparent_pixel = { .r = 0, .g = 0, .b = 0, .transparent = true };
+	constexpr BgColorData transparent_bg_pixel = { .r = 0, .g = 0, .b = 0, .transparent = true };
+	constexpr ObjColorData transparent_obj_pixel = { .r = 0, .g = 0, .b = 0, .transparent = true, .obj_mode = 0 };
 
 	struct DISPCNT
 	{
@@ -164,17 +189,11 @@ namespace PPU
 
 	struct WININ
 	{
-		u16 window0_bg0_enable : 1;
-		u16 window0_bg1_enable : 1;
-		u16 window0_bg2_enable : 1;
-		u16 window0_bg3_enable : 1;
+		u16 window0_bg_enable : 4;
 		u16 window0_obj_enable : 1;
 		u16 window0_color_special_effect : 1;
 		u16 : 2;
-		u16 window1_bg0_enable : 1;
-		u16 window1_bg1_enable : 1;
-		u16 window1_bg2_enable : 1;
-		u16 window1_bg3_enable : 1;
+		u16 window1_bg_enable : 4;
 		u16 window1_obj_enable : 1;
 		u16 window1_color_special_effect : 1;
 		u16 : 2;
@@ -182,17 +201,11 @@ namespace PPU
 
 	struct WINOUT
 	{
-		u16 outside_bg0_enable : 1;
-		u16 outside_bg1_enable : 1;
-		u16 outside_bg2_enable : 1;
-		u16 outside_bg3_enable : 1;
+		u16 outside_bg_enable : 4;
 		u16 outside_obj_enable : 1;
 		u16 outside_color_special_effect : 1;
 		u16 : 2;
-		u16 obj_window_bg0_enable : 1;
-		u16 obj_window_bg1_enable : 1;
-		u16 obj_window_bg2_enable : 1;
-		u16 obj_window_bg3_enable : 1;
+		u16 obj_window_bg_enable : 4;
 		u16 obj_window_obj_enable : 1;
 		u16 obj_window_color_special_effect : 1;
 		u16 : 2;
@@ -208,24 +221,18 @@ namespace PPU
 
 	struct BLDCNT
 	{
-		u16 bg0_1st_target_pixel : 1;
-		u16 bg1_1st_target_pixel : 1;
-		u16 bg2_1st_target_pixel : 1;
-		u16 bg3_1st_target_pixel : 1;
+		u16 bg_1st_target_pixel : 4;
 		u16 obj_1st_target_pixel : 1;
 		u16 bd_1st_target_pixel : 1;
 		u16 color_special_effect : 2;
-		u16 bg0_2nd_target_pixel : 1;
-		u16 bg1_2nd_target_pixel : 1;
-		u16 bg2_2nd_target_pixel : 1;
-		u16 bg3_2nd_target_pixel : 1;
+		u16 bg_2nd_target_pixel : 4;
 		u16 obj_2nd_target_pixel : 1;
 		u16 bd_2nd_target_pixel : 1;
 		u16 : 2;
 	} bldcnt;
 
 	u8 eva, evb, evy;
-	std::array<u8, 2> winh_x1, winh_x2, winv_x1, winv_x2;
+	std::array<u8, 2> winh_x1, winh_x2, winv_y1, winv_y2;
 
 	/* Size  Square   Horizontal  Vertical
 	0     8x8      16x8        8x16
@@ -249,15 +256,16 @@ namespace PPU
 	uint dot;
 	uint framebuffer_index;
 
-	std::array<std::array<ColorData, dots_per_line>, 4> bg_render;
-	std::array<ColorData, dots_per_line> obj_render;
+	std::array<std::array<BgColorData, dots_per_line>, 4> bg_render;
+	std::array<ObjColorData, dots_per_line> obj_render;
+	std::array<uint, 4> bg_prio = { 0, 1, 2, 3 }; /* i:th elements holds the index of the background with the i:th priority */
 
 	std::array<u8, 0x400> oam;
 	std::array<u8, 0x400> palette_ram;
 	std::array<u8, 0x18000> vram;
 
 	std::vector<u8> framebuffer;
-	std::vector<ObjectData> objects;
+	std::vector<ObjData> objects;
 
 	///////////// template definitions /////////////
 	template<std::integral Int>
