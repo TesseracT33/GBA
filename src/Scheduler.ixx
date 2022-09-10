@@ -25,6 +25,7 @@ namespace Scheduler
 		enum class EventType {
 			HBlank,
 			HBlankSetFlag,
+			IrqChange,
 			NewScanline,
 			TimerOverflow0,
 			TimerOverflow1,

@@ -27,11 +27,23 @@ namespace IRQ
 
 		void Initialize();
 		void Raise(Source source);
+		u8 ReadIE(u8 byte_index);
+		u16 ReadIE();
+		u8 ReadIF(u8 byte_index);
+		u16 ReadIF();
+		u16 ReadIME();
 		void StreamState(SerializationStream& stream);
-
-		bool ime;
-		bool irq;
-		u16 IE;
-		u16 IF;
+		void WriteIE(u8 data, u8 byte_index);
+		void WriteIE(u16 data);
+		void WriteIF(u8 data, u8 byte_index);
+		void WriteIF(u16 data);
+		void WriteIME(u16 data);
 	}
+
+	void CheckIrq();
+
+	bool ime;
+	bool irq;
+	u16 IE;
+	u16 IF;
 }

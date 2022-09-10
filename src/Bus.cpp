@@ -94,6 +94,7 @@ namespace Bus
 	Int ReadIo(u32 addr)
 	{
 		/* Reads are aligned, and all regions start at word-aligned addresses, so there cannot be a cross-region read. */
+		/* TODO: measure if jump table will be faster */
 		if (addr < 0x400'0060) {
 			return PPU::ReadReg<Int>(addr);
 		}
@@ -116,8 +117,36 @@ namespace Bus
 			return 0; /* serial #2 */
 		}
 		else {
-			/* TODO */
-			return 0;
+			auto ReadByte = [](u32 addr) {
+				switch (addr) {
+				case ADDR_IE:     return IRQ::ReadIE(0);
+				case ADDR_IE + 1: return IRQ::ReadIE(1);
+				case ADDR_IF:     return IRQ::ReadIF(0);
+				case ADDR_IF + 1: return IRQ::ReadIF(1);
+				case ADDR_IME:    return u8(IRQ::ReadIME());
+				case ADDR_IME + 1: u8(0);
+				default: return ReadOpenBus<u8>(addr);
+				}
+			};
+			auto ReadHalf = [](u32 addr) {
+				switch (addr) {
+				case ADDR_IE:  return IRQ::ReadIE();
+				case ADDR_IF:  return IRQ::ReadIF();
+				case ADDR_IME: return IRQ::ReadIME();
+				default: return ReadOpenBus<u16>(addr);
+				}
+			};
+			if constexpr (sizeof(Int) == 1) {
+				return ReadByte(addr);
+			}
+			if constexpr (sizeof(Int) == 2) {
+				return ReadHalf(addr);
+			}
+			if constexpr (sizeof(Int) == 4) {
+				u16 lo = ReadHalf(addr);
+				u16 hi = ReadHalf(addr + 2);
+				return lo | hi << 16;
+			}
 		}
 	}
 
@@ -206,7 +235,32 @@ namespace Bus
 			/* serial #2 */
 		}
 		else {
-			/* TODO */
+			auto WriteByte = [](u32 addr, u8 data) {
+				switch (addr) {
+				case ADDR_IE:     IRQ::WriteIE(data, 0);
+				case ADDR_IE + 1: IRQ::WriteIE(data, 1);
+				case ADDR_IF:     IRQ::WriteIF(data, 0);
+				case ADDR_IF + 1: IRQ::WriteIF(data, 1);
+				case ADDR_IME:    IRQ::WriteIME(data);
+				}
+			};
+			auto WriteHalf = [](u32 addr, u16 data) {
+				switch (addr) {
+				case ADDR_IE:  IRQ::WriteIE(data);
+				case ADDR_IF:  IRQ::WriteIF(data);
+				case ADDR_IME: IRQ::WriteIME(data);
+				}
+			};
+			if constexpr (sizeof(Int) == 1) {
+				WriteByte(addr, data);
+			}
+			if constexpr (sizeof(Int) == 2) {
+				WriteHalf(addr, data);
+			}
+			if constexpr (sizeof(Int) == 4) {
+				WriteHalf(addr, data & 0xFFFF);
+				WriteHalf(addr + 2, data >> 16 & 0xFFFF);
+			}
 		}
 	}
 
