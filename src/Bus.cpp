@@ -13,6 +13,7 @@ namespace Bus
 {
 	void Initialize()
 	{
+		waitcnt = 0;
 		board_wram.fill(0);
 		chip_wram.fill(0);
 	}
@@ -77,12 +78,21 @@ namespace Bus
 		case 0xA: /* 0A00'0000-0BFF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 1 */
 		case 0xB:
 		case 0xC: /* 0C00'0000-0DFF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 2 */
-		case 0xD:
+		case 0xD: {
+			u32 wait_state = addr >> 25 & 3; /* TODO */
 			return Cartridge::ReadRom<Int>(addr);
+		}
 
 		case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
+			if constexpr (sizeof(Int) == 1) {
+				return Cartridge::ReadSram(addr);
+			}
+			else {
+				return ReadOpenBus<Int>(addr); /* TODO: what should happen? */
+			}
+
 		case 0xF:
-			return Cartridge::ReadRam<Int>(addr);
+			return ReadOpenBus<Int>(addr);
 
 		default:
 			std::unreachable();
@@ -119,20 +129,23 @@ namespace Bus
 		else {
 			auto ReadByte = [](u32 addr) {
 				switch (addr) {
-				case ADDR_IE:     return IRQ::ReadIE(0);
-				case ADDR_IE + 1: return IRQ::ReadIE(1);
-				case ADDR_IF:     return IRQ::ReadIF(0);
-				case ADDR_IF + 1: return IRQ::ReadIF(1);
-				case ADDR_IME:    return u8(IRQ::ReadIME());
-				case ADDR_IME + 1: u8(0);
+				case ADDR_IE:          return IRQ::ReadIE(0);
+				case ADDR_IE + 1:      return IRQ::ReadIE(1);
+				case ADDR_IF:          return IRQ::ReadIF(0);
+				case ADDR_IF + 1:      return IRQ::ReadIF(1);
+				case ADDR_IME:         return u8(IRQ::ReadIME());
+				case ADDR_IME + 1:     u8(0);
+				case ADDR_WAITCNT:     return GetByte(waitcnt, 0);
+				case ADDR_WAITCNT + 1: return GetByte(waitcnt, 1);
 				default: return ReadOpenBus<u8>(addr);
 				}
 			};
 			auto ReadHalf = [](u32 addr) {
 				switch (addr) {
-				case ADDR_IE:  return IRQ::ReadIE();
-				case ADDR_IF:  return IRQ::ReadIF();
-				case ADDR_IME: return IRQ::ReadIME();
+				case ADDR_IE:      return IRQ::ReadIE();
+				case ADDR_IF:      return IRQ::ReadIF();
+				case ADDR_IME:     return IRQ::ReadIME();
+				case ADDR_WAITCNT: return waitcnt;
 				default: return ReadOpenBus<u16>(addr);
 				}
 			};
@@ -199,11 +212,12 @@ namespace Bus
 			break;
 
 		case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
-		case 0xF:
-			Cartridge::WriteRam<Int>(addr, data);
+			if constexpr (sizeof(Int) == 1) {
+				Cartridge::WriteSram(addr, data);
+			}
 			break;
 
-		default:
+		case 0xF:
 			break;
 		}
 	}
@@ -237,18 +251,21 @@ namespace Bus
 		else {
 			auto WriteByte = [](u32 addr, u8 data) {
 				switch (addr) {
-				case ADDR_IE:     IRQ::WriteIE(data, 0);
-				case ADDR_IE + 1: IRQ::WriteIE(data, 1);
-				case ADDR_IF:     IRQ::WriteIF(data, 0);
-				case ADDR_IF + 1: IRQ::WriteIF(data, 1);
-				case ADDR_IME:    IRQ::WriteIME(data);
+				case ADDR_IE:          IRQ::WriteIE(data, 0); break;
+				case ADDR_IE + 1:      IRQ::WriteIE(data, 1); break;
+				case ADDR_IF:          IRQ::WriteIF(data, 0); break;
+				case ADDR_IF + 1:      IRQ::WriteIF(data, 1); break;
+				case ADDR_IME:         IRQ::WriteIME(data); break;
+				case ADDR_WAITCNT:     SetByte(waitcnt, 0, data); break;
+				case ADDR_WAITCNT + 1: SetByte(waitcnt, 1, data); break;
 				}
 			};
 			auto WriteHalf = [](u32 addr, u16 data) {
 				switch (addr) {
-				case ADDR_IE:  IRQ::WriteIE(data);
-				case ADDR_IF:  IRQ::WriteIF(data);
-				case ADDR_IME: IRQ::WriteIME(data);
+				case ADDR_IE:      IRQ::WriteIE(data); break;
+				case ADDR_IF:      IRQ::WriteIF(data); break;
+				case ADDR_IME:     IRQ::WriteIME(data); break;
+				case ADDR_WAITCNT: waitcnt = data; break;
 				}
 			};
 			if constexpr (sizeof(Int) == 1) {

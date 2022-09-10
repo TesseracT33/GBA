@@ -129,6 +129,8 @@ namespace Bus
 	template<std::integral Int> Int ReadIo(u32 addr);
 	template<std::integral Int> void WriteIo(u32 addr, Int data);
 
+	u16 waitcnt;
+
 	std::array<u8, 0x40000> board_wram;
 	std::array<u8, 0x8000> chip_wram;
 }
