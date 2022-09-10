@@ -21,7 +21,6 @@ namespace PPU
 		template<std::integral Int> Int ReadPaletteRam(u32 addr);
 		template<std::integral Int> Int ReadReg(u32 addr);
 		template<std::integral Int> Int ReadVram(u32 addr);
-		void Scanline();
 		void StreamState(SerializationStream& stream);
 		template<std::integral Int> void WriteOam(u32 addr, Int data);
 		template<std::integral Int> void WritePaletteRam(u32 addr, Int data);
@@ -76,7 +75,7 @@ namespace PPU
 		u64 : 16;
 	};
 
-	RGB AlphaBlend(RGB upper_pixel, RGB lower_pixel);
+	RGB AlphaBlend(RGB target_1, RGB target_2);
 	void BlendLayers();
 	RGB BrightnessDecrease(RGB pixel);
 	RGB BrightnessIncrease(RGB pixel);
@@ -91,6 +90,7 @@ namespace PPU
 	template<void(*RenderFun)(uint), bool vertical_mosaic> void RenderBackground(uint bg);
 	template<void(*RenderFun)(), bool vertical_mosaic> void RenderBackground(uint bg);
 	void RenderTransparentBackground(uint bg);
+	void Scanline();
 	void ScanlineBackgroundRotateScaleMode(uint bg);
 	void ScanlineBackgroundTextMode(uint bg);
 	void ScanlineBackgroundBitmapMode3();
@@ -259,12 +259,10 @@ namespace PPU
 
 	std::array<std::array<BgColorData, dots_per_line>, 4> bg_render;
 	std::array<ObjColorData, dots_per_line> obj_render;
-	std::array<uint, 4> bg_prio = { 0, 1, 2, 3 }; /* i:th elements holds the index of the background with the i:th priority */
-
+	std::array<uint, 4> bg_by_prio = { 0, 1, 2, 3 }; /* i:th elements holds the index of the background with the i:th priority */
 	std::array<u8, 0x400> oam;
 	std::array<u8, 0x400> palette_ram;
 	std::array<u8, 0x18000> vram;
-
 	std::vector<u8> framebuffer;
 	std::vector<ObjData> objects;
 

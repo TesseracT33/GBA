@@ -35,7 +35,7 @@ namespace PPU
 		bool obj_win_active = false;
 
 		auto GetNextTopmostOpaqueBgLayer = [&, skip = 0](uint dot) mutable -> int {
-			auto it = std::find_if(bg_prio.begin() + skip, bg_prio.end(), [&](int bg) {
+			auto it = std::find_if(bg_by_prio.begin() + skip, bg_by_prio.end(), [&](int bg) {
 				++skip;
 				if (bg_render[bg][dot].transparent) {
 					return false;
@@ -54,7 +54,7 @@ namespace PPU
 				}
 				return true;
 			});
-			return it != bg_prio.end() ? *it : 4;
+			return it != bg_by_prio.end() ? *it : 4;
 		};
 
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
@@ -851,16 +851,12 @@ namespace PPU
 
 	void SortBackgroundsAfterPriority()
 	{
-		std::array<BGCNT, 4> bgcnt_copy = bgcnt;
-		/* bg_priority: 0=highest; 3=lowest. If two BGs have the same prio, the one with the lower index takes prio. */
-		for (int i = 0; i < 4; ++i) {
-			int max_prio = 3;
-			int max_prio_index = 4;
-		}
 		for (int i = 0; i < 4; ++i) {
 			for (int j = 0; j < 3; ++j) {
-				if (bgcnt[j].bg_priority >= bgcnt[j + 1].bg_priority) {
-					std::swap(bg_prio[j], bg_prio[j + 1]);
+				if (bgcnt[bg_by_prio[j]].bg_priority > bgcnt[bg_by_prio[j + i]].bg_priority ||
+					bgcnt[bg_by_prio[j]].bg_priority == bgcnt[bg_by_prio[j + i]].bg_priority &&
+					bg_by_prio[j] > bg_by_prio[j + 1]) {
+					std::swap(bg_by_prio[j], bg_by_prio[j + 1]);
 				}
 			}
 		}
