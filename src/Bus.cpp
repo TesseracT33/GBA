@@ -200,15 +200,21 @@ namespace Bus
 			break;
 
 		case 0x5: /* 0500'0000-0500'03FF   BG/OBJ Palette RAM */
-			PPU::WritePaletteRam<Int>(addr, data);
+			if (sizeof(Int) != 1) {
+				PPU::WritePaletteRam<Int>(addr, data);
+			}
 			break;
 
 		case 0x6: /* 0600'0000-0601'7FFF   VRAM - Video RAM */
-			PPU::WriteVram<Int>(addr, data);
+			if (sizeof(Int) != 1) {
+				PPU::WriteVram<Int>(addr, data);
+			}
 			break;
 
 		case 0x7: /* 0700'0000-0700'03FF   OAM - OBJ Attributes */
-			PPU::WriteOam<Int>(addr, data);
+			if (sizeof(Int) != 1) {
+				PPU::WriteOam<Int>(addr, data);
+			}
 			break;
 
 		case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
