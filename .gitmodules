@@ -1,3 +1,6 @@
 [submodule "external/EmuUtils"]
 	path = external/EmuUtils
 	url = https://github.com/TesseracT33/EmuUtils
+[submodule "external/Humla"]
+	path = external/Humla
+	url = https://github.com/TesseracT33/Humla
