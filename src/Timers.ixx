@@ -23,15 +23,17 @@ namespace Timers
 
 	template<uint id> void OnOverflowWithIrq();
 
+	constexpr std::array prescaler_to_period = { 1, 64, 256, 1024 };
+
 	struct Timer
 	{
 		void AddToCounter(u64 value);
 		void OnDisable();
-		void OnEnable();
-		void OnIrqDisable();
-		void OnIrqEnable();
+		void OnWriteControlTimerEnabled();
 		u16 ReadCounter();
+		void UpdateCounter();
 		void UpdatePeriod();
+		template<bool start_timer_is_enabled> void UpdateTimerChainOnTimerStatusChange();
 		void WriteControl(u8 data);
 		void WriteReload(u8 value, u8 byte_index);
 		void WriteReload(u16 value);
@@ -44,7 +46,6 @@ namespace Timers
 			u8 enable : 1;
 		} control;
 		bool is_counting; /* Timer 0: == control.enable; Others: == control.enable && (!control.count_up || prev_timer->is_counting) */
-		u16 prescaler_period;
 		u16 reload;
 		u64 counter; /* Let the range be [0, (0x10000 - reload) * prescaler_period - 1] instead of [reload, 0xFFFF] for easier computations */
 		u64 counter_max_exclusive;

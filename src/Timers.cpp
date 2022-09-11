@@ -80,12 +80,6 @@ namespace Timers
 			}
 		};
 
-		auto ReadWord = [&](u32 addr) {
-			u16 lo = ReadHalf(addr);
-			u16 hi = ReadHalf(addr + 2);
-			return lo | hi << 16;
-		};
-
 		if constexpr (sizeof(Int) == 1) {
 			return ReadByte(addr);
 		}
@@ -93,7 +87,9 @@ namespace Timers
 			return ReadHalf(addr);
 		}
 		if constexpr (sizeof(Int) == 4) {
-			return ReadWord(addr);
+			u16 lo = ReadHalf(addr);
+			u16 hi = ReadHalf(addr + 2);
+			return lo | hi << 16;
 		}
 	}
 
@@ -137,11 +133,6 @@ namespace Timers
 			}
 		};
 
-		auto WriteWord = [&](u32 addr, u32 data) {
-			WriteHalf(addr, data & 0xFFFF);
-			WriteHalf(addr + 2, data >> 16 & 0xFFFF);
-		};
-
 		if constexpr (sizeof(Int) == 1) {
 			WriteByte(addr, data);
 		}
@@ -149,7 +140,8 @@ namespace Timers
 			WriteHalf(addr, data);
 		}
 		if constexpr (sizeof(Int) == 4) {
-			WriteWord(addr, data);
+			WriteHalf(addr, data & 0xFFFF);
+			WriteHalf(addr + 2, data >> 16 & 0xFFFF);
 		}
 	}
 
@@ -158,14 +150,16 @@ namespace Timers
 	{
 		if (counter + increment < counter_max_exclusive) {
 			counter += increment;
+			time_until_overflow = counter_max_exclusive - counter;
 		}
 		else {
 			increment -= counter_max_exclusive - counter;
 			counter = increment % counter_max_exclusive;
+			time_until_overflow = counter_max_exclusive - counter;
 			if (next_timer != nullptr && next_timer->control.enable && next_timer->control.count_up) {
 				u64 num_overflows = 1 + increment / counter_max_exclusive;
-				next_timer->AddToCounter(num_overflows);
 				next_timer->time_last_counter_refresh = this->time_last_counter_refresh;
+				next_timer->AddToCounter(num_overflows);
 			}
 		}
 	}
@@ -183,107 +177,127 @@ namespace Timers
 	}
 
 
-	void Timer::OnEnable()
+	void Timer::OnWriteControlTimerEnabled()
 	{
-		u64 global_time = Scheduler::GetGlobalTime();
-		time_last_counter_refresh = global_time;
-		if (control.count_up && prev_timer != nullptr) {
+		const u64 global_time = Scheduler::GetGlobalTime();
+		counter_max_exclusive = std::numeric_limits<u16>::max() + 1 - reload;
+		if (control.count_up && prev_timer != nullptr) { /* TODO: for timer 0, use prescaler even if count_up is set? */
+			period = counter_max_exclusive * prev_timer->period;
 			if (prev_timer->is_counting) {
-				this->is_counting = true;
-				// TODO: need to update prev_timer->time_until_overflow before using it
-				time_until_overflow = prev_timer->time_until_overflow + (counter_max_exclusive - counter - 1) * prev_timer->period;
-				if (control.irq_enable) {
-					Scheduler::AddEvent(overflow_event, time_until_overflow, overflow_callback);
+				Timer* t = prev_timer;
+				while (t->control.count_up && t->prev_timer != nullptr) {
+					t = t->prev_timer;
 				}
+				u64 time_elapsed = global_time - t->time_last_counter_refresh;
+				t->time_last_counter_refresh = global_time;
+				t->AddToCounter(time_elapsed);
+				t->UpdateTimerChainOnTimerStatusChange<true>();
 			}
 			else {
-				this->is_counting = false;
+				UpdateTimerChainOnTimerStatusChange<false>();
 			}
 		}
 		else {
-			this->is_counting = true;
+			counter_max_exclusive *= prescaler_to_period[control.prescaler]; /* TODO: could make it so that counter > max */
+			period = counter_max_exclusive;
 			time_until_overflow = counter_max_exclusive - counter;
+			time_last_counter_refresh = global_time;
 			if (control.irq_enable) {
 				Scheduler::AddEvent(overflow_event, time_until_overflow, overflow_callback);
 			}
-		}
-		Timer* t = this;
-		while (t = t->next_timer, t != nullptr && t->control.enable && t->control.count_up) {
-			t->time_last_counter_refresh = global_time;
-			t->is_counting = true;
-			t->time_until_overflow = t->prev_timer->time_until_overflow + (t->counter_max_exclusive - t->counter - 1) * t->prev_timer->period;
-			if (t->control.irq_enable) {
-				Scheduler::AddEvent(t->overflow_event, t->time_until_overflow, t->overflow_callback);
-			}
-		}
-	}
-
-
-	void Timer::OnIrqDisable()
-	{
-		Scheduler::RemoveEvent(overflow_event);
-	}
-
-
-	void Timer::OnIrqEnable()
-	{
-		if (is_counting) {
-			u64 global_time = Scheduler::GetGlobalTime();
-			time_last_counter_refresh = global_time;
-			// todo: update time_until_overflow
-			Scheduler::AddEvent(overflow_event, time_until_overflow, overflow_callback);
+			UpdateTimerChainOnTimerStatusChange<true>();
 		}
 	}
 
 
 	u16 Timer::ReadCounter()
 	{
-		if (control.enable) {
-			Timer* t = this;
-			while (t->control.count_up && prev_timer != nullptr) {
-				t = t->prev_timer;
-			}
-			u64 global_time = Scheduler::GetGlobalTime();
-			u64 time_delta = global_time - t->time_last_counter_refresh;
-			t->time_last_counter_refresh = global_time;
-			t->AddToCounter(time_delta);
+		if (is_counting) {
+			UpdateCounter();
 		}
 		static constexpr std::array prescaler_shift = { 0, 6, 8, 10 };
 		return (reload + (counter >> prescaler_shift[control.prescaler])) & 0xFFFF;
 	}
 
 
-	void Timer::WriteControl(u8 data)
-	{
-		auto prev_control = control;
-		control = std::bit_cast<Control>(data);
-		static constexpr std::array prescaler_to_period = { 1, 64, 256, 1024 };
-		prescaler_period = prescaler_to_period[control.prescaler];
-		UpdatePeriod();
-		if (control.enable ^ prev_control.enable) {
-			control.enable ? OnEnable() : OnDisable();
+	void Timer::UpdateCounter()
+	{ /* precondition: is_counting == true */
+		if constexpr (enable_asserts) {
+			assert(is_counting);
 		}
-		else if (control.irq_enable ^ prev_control.irq_enable) {
-			control.irq_enable ? OnIrqEnable() : OnIrqDisable();
+		Timer* t = this;
+		while (t->control.count_up && t->prev_timer != nullptr) {
+			t = t->prev_timer;
 		}
+		u64 global_time = Scheduler::GetGlobalTime();
+		u64 time_elapsed = global_time - t->time_last_counter_refresh;
+		t->time_last_counter_refresh = global_time;
+		t->AddToCounter(time_elapsed);
 	}
 
 
 	void Timer::UpdatePeriod()
 	{
+		/* TODO: do we need to update period if we're disabled? */
 		counter_max_exclusive = std::numeric_limits<u16>::max() + 1 - reload;
-		if (!control.count_up) { // TODO: for timer 0, use prescaler even if count_up is set?
-			counter_max_exclusive *= prescaler_period;
+		if (!control.count_up) { /* TODO: for timer 0, use prescaler even if count_up is set? */
+			counter_max_exclusive *= prescaler_to_period[control.prescaler];
 			period = counter_max_exclusive;
 		}
 		else if (prev_timer != nullptr) {
 			period = counter_max_exclusive * prev_timer->period;
 		}
+		/* Note: changing the period won't affect when this timer will overflow, but it can for other ones. */
 		Timer* t = this;
 		while (t = t->next_timer, t != nullptr && t->control.count_up) {
 			t->period = t->counter_max_exclusive * t->prev_timer->period;
 			t->time_until_overflow = t->prev_timer->time_until_overflow + (t->counter_max_exclusive - t->counter - 1) * t->prev_timer->period;
-			Scheduler::ChangeEventTime(t->overflow_event, t->time_until_overflow);
+			if (t->control.irq_enable) {
+				Scheduler::ChangeEventTime(t->overflow_event, t->time_until_overflow);
+			}
+		}
+	}
+
+
+	template<bool start_timer_is_enabled>
+	void Timer::UpdateTimerChainOnTimerStatusChange()
+	{
+		is_counting = start_timer_is_enabled;
+		Timer* t = this;
+		while (t = t->next_timer, t != nullptr && t->control.enable && t->control.count_up) {
+			bool prev_is_counting = t->is_counting;
+			t->is_counting = start_timer_is_enabled;
+			if constexpr (start_timer_is_enabled) {
+				t->time_last_counter_refresh = this->time_last_counter_refresh;
+				t->period = t->prev_timer->period * t->counter_max_exclusive;
+				t->time_until_overflow = t->prev_timer->time_until_overflow + (t->counter_max_exclusive - t->counter - 1) * t->prev_timer->period;
+			}
+			if (t->control.irq_enable) {
+				if constexpr (start_timer_is_enabled) {
+					if (prev_is_counting) {
+						Scheduler::ChangeEventTime(t->overflow_event, t->time_until_overflow);
+					}
+					else {
+						Scheduler::AddEvent(t->overflow_event, t->time_until_overflow, t->overflow_callback);
+					}
+				}
+				else {
+					Scheduler::RemoveEvent(t->overflow_event);
+				}
+			}
+		}
+	}
+
+
+	void Timer::WriteControl(u8 data)
+	{
+		bool prev_enable = control.enable;
+		control = std::bit_cast<Control>(data);
+		if (control.enable) {
+			OnWriteControlTimerEnabled();
+		}
+		else if (prev_enable) {
+			OnDisable();
 		}
 	}
 
