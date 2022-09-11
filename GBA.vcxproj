@@ -105,10 +105,13 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>F:\SDKs\SDL2-2.0.22\include;F:\SDKs\SDL2_mixer-2.0.4\include;F:\SDKs\imgui-1.88\backends;F:\SDKs\imgui-1.88</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>F:\SDKs\SDL2-2.0.22\lib\x64;F:\SDKs\SDL2_mixer-2.0.4\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL2.lib;SDL2main.lib;SDL2_mixer.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -120,12 +123,15 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>F:\SDKs\SDL2-2.0.22\include;F:\SDKs\SDL2_mixer-2.0.4\include;F:\SDKs\imgui-1.88\backends;F:\SDKs\imgui-1.88</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>F:\SDKs\SDL2-2.0.22\lib\x64;F:\SDKs\SDL2_mixer-2.0.4\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL2.lib;SDL2main.lib;SDL2_mixer.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -146,6 +152,26 @@
     <ClCompile Include="external\EmuUtils\src\SSE.cpp" />
     <ClCompile Include="external\EmuUtils\src\SSE.ixx" />
     <ClCompile Include="external\EmuUtils\src\Util.ixx" />
+    <ClCompile Include="external\Humla\external\imgui-1.88\backends\imgui_impl_sdl.cpp" />
+    <ClCompile Include="external\Humla\external\imgui-1.88\backends\imgui_impl_sdlrenderer.cpp" />
+    <ClCompile Include="external\Humla\external\imgui-1.88\imgui.cpp" />
+    <ClCompile Include="external\Humla\external\imgui-1.88\imgui_draw.cpp" />
+    <ClCompile Include="external\Humla\external\imgui-1.88\imgui_tables.cpp" />
+    <ClCompile Include="external\Humla\external\imgui-1.88\imgui_widgets.cpp" />
+    <ClCompile Include="external\Humla\src\Audio.cpp" />
+    <ClCompile Include="external\Humla\src\Audio.ixx" />
+    <ClCompile Include="external\Humla\src\Core.cpp" />
+    <ClCompile Include="external\Humla\src\Core.ixx" />
+    <ClCompile Include="external\Humla\src\Emulator.cpp" />
+    <ClCompile Include="external\Humla\src\Emulator.ixx" />
+    <ClCompile Include="external\Humla\src\Frontend.cpp" />
+    <ClCompile Include="external\Humla\src\Frontend.ixx" />
+    <ClCompile Include="external\Humla\src\Input.cpp" />
+    <ClCompile Include="external\Humla\src\Input.ixx" />
+    <ClCompile Include="external\Humla\src\Types.ixx" />
+    <ClCompile Include="external\Humla\src\UserMessage.ixx" />
+    <ClCompile Include="external\Humla\src\Video.cpp" />
+    <ClCompile Include="external\Humla\src\Video.ixx" />
     <ClCompile Include="src\APU.cpp" />
     <ClCompile Include="src\APU.ixx" />
     <ClCompile Include="src\Bios.ixx" />
@@ -173,6 +199,15 @@
     <ClCompile Include="src\Scheduler.ixx" />
     <ClCompile Include="src\Timers.cpp" />
     <ClCompile Include="src\Timers.ixx" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="external\Humla\external\imgui-1.88\backends\imgui_impl_sdl.h" />
+    <ClInclude Include="external\Humla\external\imgui-1.88\backends\imgui_impl_sdlrenderer.h" />
+    <ClInclude Include="external\Humla\external\imgui-1.88\imgui.h" />
+    <ClInclude Include="external\Humla\external\imgui-1.88\imgui_internal.h" />
+    <ClInclude Include="external\Humla\external\imgui-1.88\imstb_rectpack.h" />
+    <ClInclude Include="external\Humla\external\imgui-1.88\imstb_textedit.h" />
+    <ClInclude Include="external\Humla\external\imgui-1.88\imstb_truetype.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

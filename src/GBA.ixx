@@ -1,102 +1,120 @@
 export module GBA;
 
+import APU;
+import Bus;
 import Cartridge;
+import Core;
 import CPU;
+import DMA;
+import IRQ;
+import Keypad;
 import PPU;
+import Scheduler;
+import Timers;
 import Util;
 
-import <string>;
+import <string_view>;
+import <vector>;
 
-export namespace GBA
+export struct GBA : Core
 {
-	void ApplyNewSampleRate()
+	void ApplyNewSampleRate() override
 	{
 
 	}
 
-
-	bool AssociatesWithRomExtension(const std::string& ext)
-	{
-		return ext.compare("gba") == 0 || ext.compare("GBA") == 0;
-	}
-
-
-	void Detach()
+	void Detach() override
 	{
 
 	}
 
-
-	void DisableAudio()
+	void DisableAudio() override
 	{
-		// TODO
+
 	}
 
-
-	void EnableAudio()
+	void EnableAudio() override
 	{
-		// TODO
+
 	}
 
+	std::vector<std::string_view> GetActionNames() override
+	{
+		std::vector<std::string_view> names{};
+		names.emplace_back("A");
+		names.emplace_back("B");
+		names.emplace_back("Select");
+		names.emplace_back("Start");
+		names.emplace_back("Right");
+		names.emplace_back("Left");
+		names.emplace_back("Up");
+		names.emplace_back("Down");
+		names.emplace_back("R");
+		names.emplace_back("L");
+		return names;
+	}
 
-	uint GetNumberOfInputs()
+	unsigned GetNumberOfInputs() override
 	{
 		return 10;
 	}
 
-
-	void Initialize()
+	void Initialize() override
 	{
+		APU::Initialize();
+		Bus::Initialize();
+		Cartridge::Initialize();
 		CPU::Initialize();
+		DMA::Initialize();
+		IRQ::Initialize();
+		Keypad::Initialize();
 		PPU::Initialize();
+		Scheduler::Initialize();
+		Timers::Initialize();
 	}
 
-
-	bool LoadBios(const std::string& path)
+	bool LoadBios(const std::string& path) override
 	{
 		return true;
 	}
 
-
-	bool LoadRom(const std::string& path)
+	bool LoadRom(const std::string& path) override
 	{
 		return Cartridge::LoadRom(path);
 	}
 
-
-	void NotifyNewAxisValue(uint player_index, uint input_action_index, int axis_value)
+	void LoadState() override
 	{
-		/* no axes */
+
 	}
 
-
-	void NotifyButtonPressed(uint player_index, uint input_action_index)
+	void NotifyNewAxisValue(unsigned player_index, unsigned action_index, int new_axis_value) override
 	{
-		
+
 	}
 
-
-	void NotifyButtonReleased(uint player_index, uint input_action_index)
+	void NotifyButtonPressed(unsigned player_index, unsigned action_index) override
 	{
-		
+
 	}
 
-
-	void Reset()
-	{ // TODO: reset vs initialize
-		//CPU::Initialize();
-		//PPU::Initialize();
-	}
-
-
-	void Run()
+	void NotifyButtonReleased(unsigned player_index, unsigned action_index) override
 	{
-		
+
 	}
 
-
-	void StreamState(SerializationStream& stream)
+	void Reset() override
 	{
-		
+
 	}
-}
+
+	void Run() override
+	{
+		Scheduler::Run();
+	}
+
+	void SaveState() override
+	{
+
+	}
+};
