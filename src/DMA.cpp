@@ -323,9 +323,6 @@ namespace DMA
 
 	void DmaChannel::NotifyDmaActive() const
 	{
-		/* The 'suspend' function is a no-op. This is because a DMA can interrupted only by another DMA,
-		   started at VBlank, HBlank, etc., all of which have events associated with them. Importantly, the
-		   scheduler will run this dma channel only until such events occur, and then change dma channel if needed. */
 		Scheduler::EngageDriver(driver, perform_dma_func, suspend_dma_func);
 	}
 
