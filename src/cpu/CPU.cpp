@@ -1,6 +1,8 @@
 module CPU;
 
 import Bus;
+import DebugOptions;
+import Logging;
 import PPU;
 import Scheduler;
 
@@ -39,12 +41,16 @@ namespace CPU
 		if (execution_state == ExecutionState::ARM) {
 			u32 cond = opcode >> 28;
 			bool execute_instruction = CheckCondition(cond);
+			if constexpr (log_instrs) {
+				Logging::LogInstruction(pc - 4, opcode, cond_strings[cond], execute_instruction);
+			}
 			if (execute_instruction) {
 				DecodeExecuteARM(opcode);
 			}
 		}
 		else {
 			/* In THUMB mode, {cond} can be used only for branch opcodes. */
+			Logging::LogInstruction(pc - 4, opcode);
 			DecodeExecuteTHUMB(opcode);
 		}
 	}

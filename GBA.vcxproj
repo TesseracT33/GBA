@@ -185,6 +185,7 @@
     <ClCompile Include="src\cpu\Exceptions.cpp" />
     <ClCompile Include="src\cpu\THUMB.cpp" />
     <ClCompile Include="src\debug\DebugOptions.ixx" />
+    <ClCompile Include="src\debug\Logging.ixx" />
     <ClCompile Include="src\DMA.cpp" />
     <ClCompile Include="src\DMA.ixx" />
     <ClCompile Include="src\GBA.ixx" />

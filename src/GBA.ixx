@@ -5,9 +5,11 @@ import Bus;
 import Cartridge;
 import Core;
 import CPU;
+import DebugOptions;
 import DMA;
 import IRQ;
 import Keypad;
+import Logging;
 import PPU;
 import Scheduler;
 import Timers;
@@ -71,6 +73,9 @@ export struct GBA : Core
 		PPU::Initialize();
 		Scheduler::Initialize();
 		Timers::Initialize();
+		if constexpr (log_instrs) {
+			Logging::Initialize("F:\\gba.log");
+		}
 	}
 
 	bool LoadBios(const std::string& path) override

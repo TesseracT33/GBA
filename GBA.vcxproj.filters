@@ -191,6 +191,9 @@
     <ClCompile Include="external\Humla\src\Video.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\debug\Logging.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="external\Humla\external\imgui-1.88\backends\imgui_impl_sdl.h">
