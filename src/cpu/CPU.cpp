@@ -42,7 +42,7 @@ namespace CPU
 			u32 cond = opcode >> 28;
 			bool execute_instruction = CheckCondition(cond);
 			if constexpr (log_instrs) {
-				Logging::LogInstruction(pc - 4, opcode, cond_strings[cond], execute_instruction);
+				Logging::LogInstruction(pc - 8, opcode, cond_strings[cond], execute_instruction);
 			}
 			if (execute_instruction) {
 				DecodeExecuteARM(opcode);
