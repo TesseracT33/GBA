@@ -853,8 +853,8 @@ namespace PPU
 	{
 		for (int i = 0; i < 4; ++i) {
 			for (int j = 0; j < 3; ++j) {
-				if (bgcnt[bg_by_prio[j]].bg_priority > bgcnt[bg_by_prio[j + i]].bg_priority ||
-					bgcnt[bg_by_prio[j]].bg_priority == bgcnt[bg_by_prio[j + i]].bg_priority &&
+				if (bgcnt[bg_by_prio[j]].bg_priority > bgcnt[bg_by_prio[j + 1]].bg_priority ||
+					bgcnt[bg_by_prio[j]].bg_priority == bgcnt[bg_by_prio[j + 1]].bg_priority &&
 					bg_by_prio[j] > bg_by_prio[j + 1]) {
 					std::swap(bg_by_prio[j], bg_by_prio[j + 1]);
 				}
