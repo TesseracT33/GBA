@@ -195,18 +195,18 @@ namespace CPU
 		auto rd = opcode >> 12 & 0xF;
 		auto rn = opcode >> 16 & 0xF;
 		bool set_conds = opcode >> 20 & 1;
-		bool reg_or_imm_oper = opcode >> 21 & 1; /* 0 = register; 1 = immediate */
+		bool reg_or_imm = opcode >> 21 & 1; /* 0 = register; 1 = immediate */
 
 		u32 oper1 = r[rn];
 		u32 oper2 = [&] {
-			if (reg_or_imm_oper) { /* immediate */
-				u32 immediate = opcode & 0xFF;
-				auto shift_amount = opcode >> 7 & 0x1E; /* == 2 * (opcode >> 8 & 0xF) */
-				cpsr.carry = immediate >> ((shift_amount - 1) & 0x1F) & 1;
-				return std::rotr(immediate, shift_amount);
-			}
-			else { /* register */
+			if (reg_or_imm == 0) { /* register */
 				return GetSecondOperand(opcode);
+			}
+			else { /* immediate */
+				auto imm = opcode & 0xFF;
+				auto rot = opcode >> 7 & 0x1E; /* == 2 * (opcode >> 8 & 0xF) */
+				cpsr.carry = imm >> ((rot - 1) & 0x1F) & 1;
+				return std::rotr(imm, rot);
 			}
 		}();
 
@@ -547,16 +547,16 @@ namespace CPU
 			}
 		}
 
-		bool imm_or_reg = opcode >> 25 & 1; /* 0=Register; 1=Immediate */
+		bool reg_or_imm = opcode >> 25 & 1; /* 0=Register; 1=Immediate */
 		u32 oper = [&] {
-			if (imm_or_reg == 0) { /* register */
+			if (reg_or_imm == 0) { /* register */
 				auto rm = opcode & 0xF;
-				return r[rm];
+				return r[rm]; /* seems to not shifted/rotated, unlike in data processing instrs */
 			}
 			else { /* (rotated) immediate */
 				auto imm = opcode & 0xFF;
-				auto rot = opcode >> 8 & 0xF;
-				return std::rotr(imm, rot);
+				auto rot = opcode >> 7 & 0x1E; /* == 2 * (opcode >> 8 & 0xF) */
+				return std::rotr(imm, rot); /* seems to not set carry, unlike in data processing instrs */
 			}
 		}();
 
