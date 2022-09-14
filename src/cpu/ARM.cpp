@@ -195,7 +195,7 @@ namespace CPU
 		auto rd = opcode >> 12 & 0xF;
 		auto rn = opcode >> 16 & 0xF;
 		bool set_conds = opcode >> 20 & 1;
-		bool reg_or_imm = opcode >> 21 & 1; /* 0 = register; 1 = immediate */
+		bool reg_or_imm = opcode >> 25 & 1; /* 0 = register; 1 = immediate */
 
 		u32 oper1 = r[rn];
 		u32 oper2 = [&] {
