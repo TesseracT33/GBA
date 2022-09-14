@@ -262,10 +262,10 @@ namespace CPU
 				cpsr.carry = result > std::numeric_limits<s32>::max();
 				return u32(result);
 			}
-			else if constexpr (instr == AND || instr == TST) {
+			if constexpr (instr == AND || instr == TST) {
 				return oper1 & oper2;
 			}
-			else if constexpr (instr == ASR) {
+			if constexpr (instr == ASR) {
 				auto shift_amount = oper2 & 0xFF;
 				if (shift_amount > 0) {
 					cpsr.carry = GetBit(oper1, shift_amount - 1);
@@ -275,22 +275,22 @@ namespace CPU
 					return oper1;
 				}
 			}
-			else if constexpr (instr == BIC) {
+			if constexpr (instr == BIC) {
 				return oper1 & ~oper2;
 			}
-			else if constexpr (instr == CMN) {
+			if constexpr (instr == CMN) {
 				s64 result = s64(oper1) + s64(oper2);
 				cpsr.carry = result > std::numeric_limits<s32>::max();
 				return u32(result);
 			}
-			else if constexpr (instr == CMP) {
+			if constexpr (instr == CMP) {
 				cpsr.carry = oper2 > oper1;
 				return oper1 - oper2;
 			}
-			else if constexpr (instr == EOR) {
+			if constexpr (instr == EOR) {
 				return oper1 ^ oper2;
 			}
-			else if constexpr (instr == LSL) {
+			if constexpr (instr == LSL) {
 				auto shift_amount = oper2 & 0xFF;
 				if (shift_amount > 0) {
 					cpsr.carry = shift_amount <= 32 ? GetBit(oper1, 32 - shift_amount) : 0;
@@ -300,7 +300,7 @@ namespace CPU
 					return oper1;
 				}
 			}
-			else if constexpr (instr == LSR) {
+			if constexpr (instr == LSR) {
 				auto shift_amount = oper2 & 0xFF;
 				if (shift_amount > 0) {
 					cpsr.carry = GetBit(oper1, shift_amount - 1);
@@ -310,21 +310,21 @@ namespace CPU
 					return oper1;
 				}
 			}
-			else if constexpr (instr == MUL) {
+			if constexpr (instr == MUL) {
 				cpsr.carry = 0;
 				return oper1 * oper2;
 			}
-			else if constexpr (instr == MVN) {
+			if constexpr (instr == MVN) {
 				return ~oper2;
 			}
-			else if constexpr (instr == NEG) {
+			if constexpr (instr == NEG) {
 				cpsr.carry = oper2 > 0;
 				return -s32(oper2);
 			}
-			else if constexpr (instr == ORR) {
+			if constexpr (instr == ORR) {
 				return oper1 | oper2;
 			}
-			else if constexpr (instr == ROR) {
+			if constexpr (instr == ROR) {
 				auto shift_amount = oper2 & 0xFF;
 				if (shift_amount > 0) {
 					cpsr.carry = oper1 >> ((shift_amount - 1) & 0x1F) & 1;
@@ -334,12 +334,9 @@ namespace CPU
 					return oper1;
 				}
 			}
-			else if constexpr (instr == SBC) {
+			if constexpr (instr == SBC) {
 				cpsr.carry = u64(oper2) + u64(!cpsr.carry) > u64(oper1);
 				return oper1 - oper2 - !cpsr.carry;
-			}
-			else {
-				static_assert(AlwaysFalse<instr>);
 			}
 		}();
 
@@ -432,7 +429,7 @@ namespace CPU
 		auto rd = opcode & 7;
 		auto rb = opcode >> 3 & 7;
 		auto ro = opcode >> 6 & 7;
-		auto op = opcode >> 10 & 2;
+		auto op = opcode >> 10 & 3;
 		auto addr = r[rb] + r[ro];
 		switch (op) {
 		case 0b00: /* Store halfword */
