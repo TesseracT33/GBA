@@ -553,8 +553,10 @@ namespace CPU
 				auto rm = opcode & 0xF;
 				return r[rm];
 			}
-			else { /* immediate */
-				return GetSecondOperand(opcode);
+			else { /* (rotated) immediate */
+				auto imm = opcode & 0xFF;
+				auto rot = opcode >> 8 & 0xF;
+				return std::rotr(imm, rot);
 			}
 		}();
 
