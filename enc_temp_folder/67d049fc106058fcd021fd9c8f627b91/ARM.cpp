@@ -205,13 +205,8 @@ namespace CPU
 			else { /* immediate */
 				auto imm = opcode & 0xFF;
 				auto rot = opcode >> 7 & 0x1E; /* == 2 * (opcode >> 8 & 0xF) */
-				if (rot == 0) {
-					return imm;
-				}
-				else {
-					cpsr.carry = imm >> (rot - 1) & 1;
-					return std::rotr(imm, rot);
-				}
+				cpsr.carry = imm >> ((rot - 1) & 0x1F) & 1;
+				return std::rotr(imm, rot);
 			}
 		}();
 
