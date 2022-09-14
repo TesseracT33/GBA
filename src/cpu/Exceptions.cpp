@@ -6,6 +6,21 @@ module CPU;
 
 namespace CPU
 {
+	constexpr std::string_view ExceptionToStr(Exception exc)
+	{
+		switch (exc) {
+		case Exception::DataAbort: return "Data abort";
+		case Exception::Fiq: return "FIQ";
+		case Exception::Irq: return "IRQ";
+		case Exception::PrefetchAbort: return "Prefetch abort";
+		case Exception::Reset: return "Reset";
+		case Exception::SoftwareInterrupt: return "Software interrupt";
+		case Exception::UndefinedInstruction: return "Undefined instruction";
+		default: assert(false); return "";
+		}
+	}
+
+
 	template<Exception exception>
 	constexpr uint GetExceptionPriority()
 	{

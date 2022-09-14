@@ -24,6 +24,10 @@ namespace CPU
 		void SuspendRun();
 	}
 
+	enum class ArmDataProcessingInstruction {
+		ADC, ADD, AND, BIC, CMN, CMP, EOR, MOV, MVN, ORR, RSB, RSC, SBC, SUB, TEQ, TST
+	};
+
 	enum class Exception {
 		DataAbort, Fiq, Irq, PrefetchAbort, Reset, SoftwareInterrupt, UndefinedInstruction
 	};
@@ -36,10 +40,6 @@ namespace CPU
 		User, Fiq, Irq, Supervisor, Abort, Undefined, System
 	};
 
-	enum class ArmDataProcessingInstruction {
-		ADC, ADD, AND, BIC, CMN, CMP, EOR, MOV, MVN, ORR, RSB, RSC, SBC, SUB, TEQ, TST
-	};
-
 	enum class OffsetType {
 		Register, Immediate
 	};
@@ -50,10 +50,12 @@ namespace CPU
 
 	using InstrHandler = void(*)(u32);
 
+	constexpr std::string_view ArmDataProcessingInstructionToStr(ArmDataProcessingInstruction instr);
 	bool CheckCondition(u32 cond);
 	void DecodeExecute(u32 opcode);
 	void DecodeExecuteARM(u32 opcode);
 	void DecodeExecuteTHUMB(u16 opcode);
+	constexpr std::string_view ExceptionToStr(Exception exc);
 	u32 Fetch();
 	void FlushPipeline();
 	template<Exception> constexpr uint GetExceptionPriority();
@@ -70,6 +72,7 @@ namespace CPU
 	template<Exception> void SignalException();
 	void StallPipeline(uint cycles);
 	void StepPipeline();
+	constexpr std::string_view ThumbAluInstructionToStr(ThumbAluInstruction instr);
 
 	/* ARM instructions */
 	template<bool> void BlockDataTransfer(u32 opcode);

@@ -10,6 +10,31 @@ import Bus;
 
 namespace CPU
 {
+	constexpr std::string_view ArmDataProcessingInstructionToStr(ArmDataProcessingInstruction instr)
+	{
+		using enum ArmDataProcessingInstruction;
+		switch (instr) {
+		case ADC: return "ADC";
+		case ADD: return "ADD";
+		case AND: return "AND";
+		case BIC: return "BIC";
+		case CMN: return "CMN";
+		case CMP: return "CMP";
+		case EOR: return "EOR";
+		case MOV: return "MOV";
+		case MVN: return "MVN";
+		case ORR: return "ORR";
+		case RSB: return "RSB";
+		case RSC: return "RSC";
+		case SBC: return "SBC";
+		case SUB: return "SUB";
+		case TEQ: return "TEQ";
+		case TST: return "TST";
+		default: assert(false); return "";
+		}
+	}
+
+
 	template<bool pre_or_post /* 0 = post (add offset after transfer); 1 = pre (add offset before transfer) */ >
 	void BlockDataTransfer(u32 opcode) /* LDM, STM */
 	{

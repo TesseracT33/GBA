@@ -8,6 +8,31 @@ import Bus;
 
 namespace CPU
 {
+	constexpr std::string_view ThumbAluInstructionToStr(ThumbAluInstruction instr)
+	{
+		using enum ThumbAluInstruction;
+		switch (instr) {
+		case ADC: return "ADC";
+		case AND: return "AND";
+		case ASR: return "ASR";
+		case BIC: return "BIC";
+		case CMN: return "CMN";
+		case CMP: return "CMP";
+		case EOR: return "EOR";
+		case LSL: return "LSL";
+		case LSR: return "LSR";
+		case MUL: return "MUL";
+		case MVN: return "MVN";
+		case NEG: return "NEG";
+		case ORR: return "ORR";
+		case ROR: return "ROR";
+		case SBC: return "SBC";
+		case TST: return "TST";
+		default: assert(false); return "";
+		}
+	}
+
+
 	void DecodeExecuteTHUMB(u16 opcode)
 	{
 		switch (opcode >> 12 & 0xF) {
