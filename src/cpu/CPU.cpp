@@ -97,7 +97,9 @@ namespace CPU
 		r13_irq = r14_irq = 0;
 		r13_und = r14_und = 0;
 		spsr = spsr_fiq = spsr_svc = spsr_abt = spsr_irq = spsr_und = 0;
-		cpsr = std::bit_cast<CPSR>(cpsr_mode_bits_system);
+		std::memset(&cpsr, 0, sizeof(cpsr));
+		cpsr.mode = cpsr_mode_bits_supervisor;
+		cpsr.irq_disable = cpsr.fiq_disable = 1;
 		execution_state = ExecutionState::ARM;
 	}
 
