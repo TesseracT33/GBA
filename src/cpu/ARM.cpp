@@ -178,7 +178,7 @@ namespace CPU
 	void BranchAndLink(u32 opcode) /* BL */
 	{
 		s32 offset = SignExtend<s32, 26>((opcode & 0xFF'FFFF) << 2);
-		lr = pc;
+		lr = pc - 4; /* The PC value written into R14 is adjusted to allow for the prefetch, and contains the address of the instruction following the BL instruction */
 		pc += offset;
 		FlushPipeline();
 	}
