@@ -78,7 +78,10 @@ namespace CPU
 
 	void FlushPipeline()
 	{
-		pipeline.index = pipeline.step = 0;
+		pipeline.index = 0;
+		pipeline.step = 1; /* TODO: if pipeline is flushed, next opcode has already been fetched.
+		This is a temporary solution; I don't know if the first instr should be fetched on the next cycle instead.
+		Also, bad things will happen if we switch between ARM and THUMB */
 	}
 
 
