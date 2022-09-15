@@ -42,7 +42,7 @@ namespace CPU
 			u32 cond = opcode >> 28;
 			bool execute_instruction = CheckCondition(cond);
 			if constexpr (log_instrs) {
-				Logging::LogInstruction(pc - 8, opcode, cond_strings[cond], execute_instruction);
+				Logging::LogInstruction(pc - 8, opcode, cond_strings[cond], execute_instruction, r);
 			}
 			if (execute_instruction) {
 				DecodeExecuteARM(opcode);
@@ -50,7 +50,7 @@ namespace CPU
 		}
 		else {
 			/* In THUMB mode, {cond} can be used only for branch opcodes. */
-			Logging::LogInstruction(pc - 4, opcode);
+			Logging::LogInstruction(pc - 4, opcode, r);
 			DecodeExecuteTHUMB(opcode);
 		}
 	}
