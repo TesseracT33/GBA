@@ -197,8 +197,8 @@ namespace CPU
 		bool set_conds = opcode >> 20 & 1;
 		bool reg_or_imm = opcode >> 25 & 1; /* 0 = register; 1 = immediate */
 
-		u32 oper1 = r[rn];
-		u32 oper2 = [&] {
+		u32 op1 = r[rn];
+		u32 op2 = [&] {
 			if (reg_or_imm == 0) { /* register */
 				return GetSecondOperand(opcode);
 			}
@@ -217,54 +217,19 @@ namespace CPU
 
 		/* TODO: right now, the carry can be modified through a call to the "GetSecondOperand" function,
 			even if the "set condition codes" flag is clear. Is this correct? */
-		bool carry{};
 		u32 result = [&] {
-			if constexpr (instr == ADC) {
-				s64 result = s64(oper1) + s64(oper2) + s64(cpsr.carry);
-				carry = result > std::numeric_limits<s32>::max();
-				return u32(result);
-			}
-			if constexpr (instr == ADD || instr == CMN) {
-				s64 result = s64(oper1) + s64(oper2);
-				carry = result > std::numeric_limits<s32>::max();
-				return u32(result);
-			}
-			if constexpr (instr == AND || instr == TST) {
-				return oper1 & oper2;
-			}
-			if constexpr (instr == BIC) {
-				return oper1 & ~oper2;
-			}
-			if constexpr (instr == CMP || instr == SUB) {
-				carry = oper2 > oper1;
-				return oper1 - oper2;
-			}
-			if constexpr (instr == EOR || instr == TEQ) {
-				return oper1 ^ oper2;
-			}
-			if constexpr (instr == MOV) {
-				return oper2;
-			}
-			if constexpr (instr == MVN) {
-				return ~oper2;
-			}
-			if constexpr (instr == ORR) {
-				return oper1 | oper2;
-			}
-			if constexpr (instr == RSB) {
-				carry = oper1 > oper2;
-				return oper2 - oper1;
-			}
-			if constexpr (instr == RSC) {
-				auto result = oper2 - oper1 + cpsr.carry - 1;
-				carry = oper1 + 1 - cpsr.carry > oper2;
-				return result;
-			}
-			if constexpr (instr == SBC) {
-				auto result = oper1 - oper2 + cpsr.carry - 1;
-				carry = oper2 + 1 - cpsr.carry > oper1;
-				return result;
-			}
+			if constexpr (instr == ADC)                 return op1 + op2 + cpsr.carry;
+			if constexpr (instr == ADD || instr == CMN) return op1 + op2;
+			if constexpr (instr == AND || instr == TST) return op1 & op2;
+			if constexpr (instr == BIC)                 return op1 & ~op2;
+			if constexpr (instr == CMP || instr == SUB) return op1 - op2;
+			if constexpr (instr == EOR || instr == TEQ) return op1 ^ op2;
+			if constexpr (instr == MOV)                 return op2;
+			if constexpr (instr == MVN)                 return ~op2;
+			if constexpr (instr == ORR)                 return op1 | op2;
+			if constexpr (instr == RSB)                 return op2 - op1;
+			if constexpr (instr == RSC)                 return op2 - op1 + cpsr.carry - 1;
+			if constexpr (instr == SBC)                 return op1 - op2 + cpsr.carry - 1;
 		}();
 
 		if constexpr (instr != CMN && instr != CMP && instr != TEQ && instr != TST) {
@@ -291,10 +256,13 @@ namespace CPU
 			else {
 				cpsr.zero = result == 0;
 				cpsr.negative = GetBit(result, 31);
-				cpsr.carry = carry;
-				if constexpr (is_arithmetic_instr) {
-					cpsr.overflow = GetBit((oper1 ^ result) & (oper2 ^ result), 31);
-				}
+				if constexpr (is_arithmetic_instr)          cpsr.overflow = GetBit((op1 ^ result) & (op2 ^ result), 31);
+				if constexpr (instr == ADC)                 cpsr.carry = u64(op1) + u64(op2) + u64(cpsr.carry) > std::numeric_limits<u32>::max();
+				if constexpr (instr == ADD || instr == CMN) cpsr.carry = std::numeric_limits<u32>::max() - u32(op1) < u32(op2);
+				if constexpr (instr == CMP || instr == SUB) cpsr.carry = op1 < op2;
+				if constexpr (instr == RSB)                 cpsr.carry = op1 > op2;
+				if constexpr (instr == RSC)                 cpsr.carry = u64(op1) - u64(cpsr.carry) + u64(1) > u64(op2);
+				if constexpr (instr == SBC)                 cpsr.carry = u64(op2) - u64(cpsr.carry) + u64(1) > u64(op1);
 			}
 		}
 	}
