@@ -193,16 +193,16 @@ namespace CPU
 		auto rs = opcode >> 3 & 7;
 		auto offset = opcode >> 6 & 7;
 		bool op = opcode >> 9 & 1;
-		bool reg_or_imm_oper = opcode >> 10 & 1; /* 0=Register; 1=Immediate */
+		bool reg_or_imm = opcode >> 10 & 1; /* 0=Register; 1=Immediate */
 
 		u32 oper1 = r[rs];
-		u32 oper2 = reg_or_imm_oper ? offset : r[offset];
+		u32 oper2 = reg_or_imm ? offset : r[offset];
 
 		auto result = [&] {
 			if (op == 0) { /* ADD */
-				s64 sum = s64(oper1) + s64(oper2);
-				cpsr.carry = sum > std::numeric_limits<s32>::max();
-				return u32(sum);
+				u64 result = u64(oper1) + u64(oper2);
+				cpsr.carry = result > std::numeric_limits<u32>::max();
+				return u32(result);
 			}
 			else { /* SUB */
 				cpsr.carry = oper2 > oper1;
@@ -219,7 +219,7 @@ namespace CPU
 
 	void MoveCompareAddSubtractImm(u16 opcode) /* Format 3: ADD, CMP, MOV, SUB */
 	{
-		u8 immediate = opcode & 0xFF;
+		u8 imm = opcode & 0xFF;
 		auto rd = opcode >> 8 & 7;
 		auto op = opcode >> 11 & 3;
 
@@ -227,28 +227,28 @@ namespace CPU
 			switch (op) {
 			case 0b00: /* MOV */
 				cpsr.negative = 0;
-				return u32(immediate);
+				return u32(imm);
 
 			case 0b01: { /* CMP */
-				u32 result = r[rd] - immediate;
-				cpsr.overflow = GetBit((r[rd] ^ result) & (immediate ^ result), 31);
-				cpsr.carry = immediate > r[rd];
+				u32 result = r[rd] - imm;
+				cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
+				cpsr.carry = imm > r[rd];
 				cpsr.negative = GetBit(result, 31);
 				return result;
 			}
 
 			case 0b10: { /* ADD */
-				s64 result = s64(r[rd]) + s64(immediate);
-				cpsr.overflow = GetBit((r[rd] ^ result) & (immediate ^ result), 31);
-				cpsr.carry = result > std::numeric_limits<s32>::max();
+				u64 result = u64(r[rd]) + u64(imm);
+				cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
+				cpsr.carry = result > std::numeric_limits<u32>::max();
 				cpsr.negative = GetBit(result, 31);
 				return u32(result);
 			}
 
 			case 0b11: { /* SUB */
-				u32 result = r[rd] - immediate;
-				cpsr.overflow = GetBit((r[rd] ^ result) & (immediate ^ result), 31);
-				cpsr.carry = immediate > r[rd];
+				u32 result = r[rd] - imm;
+				cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
+				cpsr.carry = imm > r[rd];
 				cpsr.negative = GetBit(result, 31);
 				return result;
 			}
@@ -270,8 +270,8 @@ namespace CPU
 
 		auto rd = opcode & 7;
 		auto rs = opcode >> 3 & 7;
-		auto oper1 = r[rd];
-		auto oper2 = r[rs];
+		auto op1 = r[rd];
+		auto op2 = r[rs];
 
 		/* Affected Flags:
 			N,Z,C,V for  ADC,SBC,NEG,CMP,CMN
@@ -283,85 +283,85 @@ namespace CPU
 
 		auto result = [&] {
 			if constexpr (instr == ADC) {
-				s64 result = s64(oper1) + s64(oper2) + s64(cpsr.carry);
-				cpsr.carry = result > std::numeric_limits<s32>::max();
+				u64 result = u64(op1) + u64(op2) + u64(cpsr.carry);
+				cpsr.carry = result > std::numeric_limits<u32>::max();
 				return u32(result);
 			}
 			if constexpr (instr == AND || instr == TST) {
-				return oper1 & oper2;
+				return op1 & op2;
 			}
 			if constexpr (instr == ASR) {
-				auto shift_amount = oper2 & 0xFF;
+				auto shift_amount = op2 & 0xFF;
 				if (shift_amount > 0) {
-					cpsr.carry = GetBit(oper1, shift_amount - 1);
-					return u32(s32(oper1) >> shift_amount);
+					cpsr.carry = GetBit(op1, shift_amount - 1);
+					return u32(s32(op1) >> shift_amount);
 				}
 				else {
-					return oper1;
+					return op1;
 				}
 			}
 			if constexpr (instr == BIC) {
-				return oper1 & ~oper2;
+				return op1 & ~op2;
 			}
 			if constexpr (instr == CMN) {
-				s64 result = s64(oper1) + s64(oper2);
-				cpsr.carry = result > std::numeric_limits<s32>::max();
+				u64 result = u64(op1) + u64(op2);
+				cpsr.carry = result > std::numeric_limits<u32>::max();
 				return u32(result);
 			}
 			if constexpr (instr == CMP) {
-				cpsr.carry = oper2 > oper1;
-				return oper1 - oper2;
+				cpsr.carry = op2 > op1;
+				return op1 - op2;
 			}
 			if constexpr (instr == EOR) {
-				return oper1 ^ oper2;
+				return op1 ^ op2;
 			}
 			if constexpr (instr == LSL) {
-				auto shift_amount = oper2 & 0xFF;
+				auto shift_amount = op2 & 0xFF;
 				if (shift_amount > 0) {
-					cpsr.carry = shift_amount <= 32 ? GetBit(oper1, 32 - shift_amount) : 0;
-					return oper1 << shift_amount;
+					cpsr.carry = shift_amount <= 32 ? GetBit(op1, 32 - shift_amount) : 0;
+					return op1 << shift_amount;
 				}
 				else {
-					return oper1;
+					return op1;
 				}
 			}
 			if constexpr (instr == LSR) {
-				auto shift_amount = oper2 & 0xFF;
+				auto shift_amount = op2 & 0xFF;
 				if (shift_amount > 0) {
-					cpsr.carry = GetBit(oper1, shift_amount - 1);
-					return u32(oper1) >> shift_amount;
+					cpsr.carry = GetBit(op1, shift_amount - 1);
+					return u32(op1) >> shift_amount;
 				}
 				else {
-					return oper1;
+					return op1;
 				}
 			}
 			if constexpr (instr == MUL) {
 				cpsr.carry = 0;
-				return oper1 * oper2;
+				return op1 * op2;
 			}
 			if constexpr (instr == MVN) {
-				return ~oper2;
+				return ~op2;
 			}
 			if constexpr (instr == NEG) {
-				cpsr.carry = oper2 > 0;
-				return -s32(oper2);
+				cpsr.carry = op2 > 0;
+				return -s32(op2);
 			}
 			if constexpr (instr == ORR) {
-				return oper1 | oper2;
+				return op1 | op2;
 			}
 			if constexpr (instr == ROR) {
-				auto shift_amount = oper2 & 0xFF;
+				auto shift_amount = op2 & 0xFF;
 				if (shift_amount > 0) {
-					cpsr.carry = oper1 >> ((shift_amount - 1) & 0x1F) & 1;
-					return std::rotr(oper1, shift_amount);
+					cpsr.carry = op1 >> ((shift_amount - 1) & 0x1F) & 1;
+					return std::rotr(op1, shift_amount);
 				}
 				else {
-					return oper1;
+					return op1;
 				}
 			}
 			if constexpr (instr == SBC) {
-				cpsr.carry = u64(oper2) + u64(!cpsr.carry) > u64(oper1);
-				return oper1 - oper2 - !cpsr.carry;
+				cpsr.carry = u64(op2) + u64(!cpsr.carry) > u64(op1);
+				return op1 - op2 - !cpsr.carry;
 			}
 		}();
 
@@ -371,7 +371,7 @@ namespace CPU
 		cpsr.zero = result == 0;
 		cpsr.negative = GetBit(result, 31);
 		if constexpr (instr == ADC || instr == CMN || instr == CMP || instr == NEG || instr == SBC) {
-			cpsr.overflow = GetBit((oper1 ^ result) & (oper2 ^ result), 31);
+			cpsr.overflow = GetBit((op1 ^ result) & (op2 ^ result), 31);
 		}
 	}
 
