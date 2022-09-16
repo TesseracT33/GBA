@@ -49,7 +49,8 @@ namespace CPU
 
 	void HandleDataAbortException()
 	{
-		r14_abt = pc;
+		/* store the address of the instruction after the one that caused the exception to occur */
+		r14_abt = pc - (execution_state == ExecutionState::ARM ? 4 : 2);
 		pc = exception_vector_data_abort;
 		FlushPipeline();
 		spsr_abt = std::bit_cast<u32>(cpsr);
@@ -61,7 +62,7 @@ namespace CPU
 
 	void HandleFiqException()
 	{
-		r14_fiq = pc;
+		r14_fiq = pc - (execution_state == ExecutionState::ARM ? 4 : 2);
 		pc = exception_vector_fiq;
 		FlushPipeline();
 		spsr_fiq = std::bit_cast<u32>(cpsr);
@@ -73,7 +74,7 @@ namespace CPU
 
 	void HandleIrqException()
 	{
-		r14_irq = pc;
+		r14_irq = pc - (execution_state == ExecutionState::ARM ? 4 : 2);
 		pc = exception_vector_irq;
 		FlushPipeline();
 		spsr_irq = std::bit_cast<u32>(cpsr);
@@ -85,7 +86,7 @@ namespace CPU
 
 	void HandlePrefetchAbortException()
 	{
-		r14_abt = pc;
+		r14_abt = pc - (execution_state == ExecutionState::ARM ? 4 : 2);
 		pc = exception_vector_prefetch_abort;
 		FlushPipeline();
 		spsr_abt = std::bit_cast<u32>(cpsr);
@@ -97,7 +98,7 @@ namespace CPU
 
 	void HandleResetException()
 	{
-		r14_svc = pc;
+		r14_svc = pc - (execution_state == ExecutionState::ARM ? 4 : 2);
 		pc = exception_vector_reset;
 		FlushPipeline();
 		spsr_svc = std::bit_cast<u32>(cpsr);
@@ -109,7 +110,7 @@ namespace CPU
 
 	void HandleSoftwareInterruptException()
 	{
-		r14_svc = pc;
+		r14_svc = pc - (execution_state == ExecutionState::ARM ? 4 : 2);
 		pc = exception_vector_software_int;
 		FlushPipeline();
 		spsr_svc = std::bit_cast<u32>(cpsr);
@@ -121,7 +122,7 @@ namespace CPU
 
 	void HandleUndefinedInstructionException()
 	{
-		r14_und = pc;
+		r14_und = pc - (execution_state == ExecutionState::ARM ? 4 : 2);
 		pc = exception_vector_undefined_instr;
 		FlushPipeline();
 		spsr_und = std::bit_cast<u32>(cpsr);
