@@ -69,74 +69,150 @@ namespace CPU
 			}
 		};
 
+		/* The registers are transferred in the order lowest to highest, so R15 (if in the list) will always be transferred last.
+		The lowest register also gets transferred to/from the lowest memory address. */
+		/* TODO: reduce code duplication */
 		if (load_or_store == 0) {
 			if (load_psr_and_force_user_mode == 0) {
-				for (int i = 0; i < 16; ++i) {
-					if (reg_list & 1 << i) {
-						StoreReg(r[i]);
+				if (up_or_down == 0) {
+					for (int i = 15; i >= 0; --i) {
+						if (reg_list & 1 << i) {
+							StoreReg(r[i]);
+						}
+					}
+				}
+				else {
+					for (int i = 0; i < 16; ++i) {
+						if (reg_list & 1 << i) {
+							StoreReg(r[i]);
+						}
 					}
 				}
 			}
 			else {
 				/* Transfer user registers */
-				for (int i = 0; i < 8; ++i) {
-					if (reg_list & 1 << i) {
-						StoreReg(r[i]);
+				if (up_or_down == 0) {
+					if (reg_list & 1 << 15) {
+						StoreReg(r[15]);
+					}
+					if (reg_list & 1 << 14) {
+						StoreReg(r14_usr);
+					}
+					if (reg_list & 1 << 13) {
+						StoreReg(r13_usr);
+					}
+					for (int i = 12; i >= 8; --i) {
+						if (reg_list & 1 << i) {
+							StoreReg(r8_r12_non_fiq[i - 8]);
+						}
+					}
+					for (int i = 7; i >= 0; --i) {
+						if (reg_list & 1 << i) {
+							StoreReg(r[i]);
+						}
 					}
 				}
-				for (int i = 8; i < 13; ++i) {
-					if (reg_list & 1 << i) {
-						StoreReg(r8_r12_non_fiq[i - 8]);
+				else {
+					for (int i = 0; i < 8; ++i) {
+						if (reg_list & 1 << i) {
+							StoreReg(r[i]);
+						}
 					}
-				}
-				if (reg_list & 1 << 13) {
-					StoreReg(r13_usr);
-				}
-				if (reg_list & 1 << 14) {
-					StoreReg(r14_usr);
-				}
-				if (reg_list & 1 << 15) {
-					StoreReg(r[15]);
+					for (int i = 8; i < 13; ++i) {
+						if (reg_list & 1 << i) {
+							StoreReg(r8_r12_non_fiq[i - 8]);
+						}
+					}
+					if (reg_list & 1 << 13) {
+						StoreReg(r13_usr);
+					}
+					if (reg_list & 1 << 14) {
+						StoreReg(r14_usr);
+					}
+					if (reg_list & 1 << 15) {
+						StoreReg(r[15]);
+					}
 				}
 			}
 		}
 		else {
 			if (load_psr_and_force_user_mode == 0) {
-				for (int i = 0; i < 16; ++i) {
-					if (reg_list & 1 << i) {
-						r[i] = LoadReg();
+				if (up_or_down == 0) {
+					for (int i = 15; i >= 0; --i) {
+						if (reg_list & 1 << i) {
+							r[i] = LoadReg();
+						}
+					}
+				}
+				else {
+					for (int i = 0; i < 16; ++i) {
+						if (reg_list & 1 << i) {
+							r[i] = LoadReg();
+						}
 					}
 				}
 			}
 			else {
 				if (reg_list & 1 << 15) {
-					for (int i = 0; i < 16; ++i) {
-						if (reg_list & 1 << i) {
-							r[i] = LoadReg();
+					if (up_or_down == 0) {
+						for (int i = 15; i >= 0; --i) {
+							if (reg_list & 1 << i) {
+								r[i] = LoadReg();
+							}
+						}
+					}
+					else {
+						for (int i = 0; i < 16; ++i) {
+							if (reg_list & 1 << i) {
+								r[i] = LoadReg();
+							}
 						}
 					}
 					cpsr = std::bit_cast<CPSR>(spsr);
 				}
 				else {
 					/* Transfer user registers */
-					for (int i = 0; i < 8; ++i) {
-						if (reg_list & 1 << i) {
-							r[i] = LoadReg();
+					if (up_or_down == 0) {
+						if (reg_list & 1 << 15) {
+							r[15] = LoadReg();
+						}
+						if (reg_list & 1 << 14) {
+							r14_usr = LoadReg();
+						}
+						if (reg_list & 1 << 13) {
+							r13_usr = LoadReg();
+						}
+						for (int i = 12; i >= 8; --i) {
+							if (reg_list & 1 << i) {
+								r8_r12_non_fiq[i - 8] = LoadReg();
+							}
+						}
+						for (int i = 7; i >= 0; --i) {
+							if (reg_list & 1 << i) {
+								r[i] = LoadReg();
+							}
 						}
 					}
-					for (int i = 8; i < 13; ++i) {
-						if (reg_list & 1 << i) {
-							r8_r12_non_fiq[i - 8] = LoadReg();
+					else {
+						for (int i = 0; i < 8; ++i) {
+							if (reg_list & 1 << i) {
+								r[i] = LoadReg();
+							}
 						}
-					}
-					if (reg_list & 1 << 13) {
-						r13_usr = LoadReg();
-					}
-					if (reg_list & 1 << 14) {
-						r14_usr = LoadReg();
-					}
-					if (reg_list & 1 << 15) {
-						r[15] = LoadReg();
+						for (int i = 8; i < 13; ++i) {
+							if (reg_list & 1 << i) {
+								r8_r12_non_fiq[i - 8] = LoadReg();
+							}
+						}
+						if (reg_list & 1 << 13) {
+							r13_usr = LoadReg();
+						}
+						if (reg_list & 1 << 14) {
+							r14_usr = LoadReg();
+						}
+						if (reg_list & 1 << 15) {
+							r[15] = LoadReg();
+						}
 					}
 				}
 			}
