@@ -37,7 +37,7 @@ namespace Logging
 	std::string FormatRegisters(const std::array<u32, 16>& r)
 	{
 		return std::format("r0:{:08X} r1:{:08X} r2:{:08X} r3:{:08X} r4:{:08X} r5:{:08X} r6:{:08X} r7:{:08X} "
-			"r8:{:08X} r9:{:08X} r10:{:08X} r11:{:08X} r12:{:08X} r13:{:08X} r14:{:08X} r15:{:08X}",
+			"r8:{:08X} r9:{:08X} r10:{:08X} r11:{:08X} r12:{:08X} sp:{:08X} lr:{:08X} pc:{:08X}",
 			r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15]);
 	}
 
