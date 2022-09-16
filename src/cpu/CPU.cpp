@@ -59,6 +59,10 @@ namespace CPU
 			DecodeExecuteTHUMB(opcode);
 			Logging::LogInstruction(pc_when_current_instr_fetched, opcode, r, std::bit_cast<u32>(cpsr));
 		}
+		if (exception_has_occurred) {
+			exception_handler();
+			exception_has_occurred = false;
+		}
 	}
 
 

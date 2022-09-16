@@ -24,6 +24,8 @@ namespace CPU
 		void SuspendRun();
 	}
 
+	using ExceptionHandler = void(*)();
+
 	enum class ArmDataProcessingInstruction {
 		ADC, ADD, AND, BIC, CMN, CMP, EOR, MOV, MVN, ORR, RSB, RSC, SBC, SUB, TEQ, TST
 	};
@@ -58,6 +60,7 @@ namespace CPU
 	constexpr std::string_view ExceptionToStr(Exception exc);
 	u32 Fetch();
 	void FlushPipeline();
+	template<Exception> ExceptionHandler GetExceptionHandler();
 	template<Exception> constexpr uint GetExceptionPriority();
 	u32 GetSecondOperand(u32 opcode);
 	void HandleDataAbortException();
@@ -164,8 +167,9 @@ namespace CPU
 	u32 spsr;
 	std::array<u32, 16> r; /* currently active registers */
 
-	Exception occurred_exception;
+	bool exception_has_occurred;
 	uint occurred_exception_priority;
+	ExceptionHandler exception_handler;
 
 	u64 cycle;
 

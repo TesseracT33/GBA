@@ -22,6 +22,19 @@ namespace CPU
 
 
 	template<Exception exception>
+	ExceptionHandler GetExceptionHandler()
+	{
+		if constexpr (exception == Exception::Reset)                return HandleResetException;
+		if constexpr (exception == Exception::DataAbort)            return HandleDataAbortException;
+		if constexpr (exception == Exception::Fiq)                  return HandleFiqException;
+		if constexpr (exception == Exception::Irq)                  return HandleIrqException;
+		if constexpr (exception == Exception::PrefetchAbort)        return HandlePrefetchAbortException;
+		if constexpr (exception == Exception::SoftwareInterrupt)    return HandleSoftwareInterruptException;
+		if constexpr (exception == Exception::UndefinedInstruction) return HandleUndefinedInstructionException;
+	}
+
+
+	template<Exception exception>
 	constexpr uint GetExceptionPriority()
 	{
 		if constexpr (exception == Exception::Reset)                return 1;
@@ -122,9 +135,10 @@ namespace CPU
 	void SignalException()
 	{
 		constexpr static auto priority = GetExceptionPriority<exception>();
-		if (priority < occurred_exception_priority) {
-			occurred_exception = exception;
+		if (!exception_has_occurred || priority < occurred_exception_priority) {
+			exception_has_occurred = true;
 			occurred_exception_priority = priority;
+			exception_handler = GetExceptionHandler<exception>();
 		}
 	}
 
