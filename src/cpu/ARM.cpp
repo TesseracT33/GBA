@@ -59,11 +59,11 @@ namespace CPU
 			return ret;
 		};
 
-		auto StoreReg = [&](u32 word) {
+		auto StoreReg = [&](u32 reg) {
 			if constexpr (pre_or_post == 1) {
 				addr += addr_delta;
 			}
-			Bus::Write<u32>(addr, word);
+			Bus::Write<u32>(addr, reg);
 			if constexpr (pre_or_post == 0) {
 				addr += addr_delta;
 			}

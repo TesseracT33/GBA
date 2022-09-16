@@ -570,25 +570,37 @@ namespace CPU
 		auto reg_list = opcode & 0xFF;
 		bool transfer_lr_pc = opcode >> 8 & 1; /* 0: Do not store LR / load PC; 1: Store LR / Load PC */
 		bool load_or_store = opcode >> 11 & 1; /* 0: store; 1: load */
+
+		auto LoadReg = [&] {
+			u32 ret = Bus::Read<u32>(sp);
+			sp += 4;
+			return ret;
+		};
+
+		auto StoreReg = [&](u32 reg) {
+			sp -= 4;
+			Bus::Write<u32>(sp, reg);
+		};
+
 		/* The lowest register gets transferred to/from the lowest memory address. */
 		if (load_or_store == 0) {
 			if (transfer_lr_pc) {
-				Bus::Write<u32>(--sp, lr);
+				StoreReg(lr);
 			}
 			for (int i = 7; i >= 0; --i) {
 				if (reg_list & 1 << i) {
-					Bus::Write<u32>(--sp, r[i]);
+					StoreReg(r[i]);
 				}
 			}
 		}
 		else {
 			for (int i = 0; i < 8; ++i) {
 				if (reg_list & 1 << i) {
-					r[i] = Bus::Read<u32>(sp++);
+					r[i] = LoadReg();
 				}
 			}
 			if (transfer_lr_pc) {
-				pc = Bus::Read<u32>(sp++) & ~1;
+				pc = LoadReg() & ~1;
 				FlushPipeline();
 			}
 		}
