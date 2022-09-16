@@ -672,8 +672,9 @@ namespace CPU
 		else {
 			s32 offset = immediate << 1;
 			lr += offset;
-			std::swap(pc, lr);
-			lr |= 1;
+			auto tmp = pc;
+			pc = lr;
+			lr = (tmp - 2) | 1; /* the address of the instruction following the BL is placed in LR and bit 0 of LR is set */
 		}
 	}
 }
