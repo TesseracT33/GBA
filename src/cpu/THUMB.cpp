@@ -414,7 +414,7 @@ namespace CPU
 
 		case 0b11: /* BX */
 			pc = r[rs];
-			if (rs & 1) {
+			if (pc & 1) { /* Bit 0 of the address determines the processor state on entry to the routine */
 				SetExecutionState(ExecutionState::THUMB);
 				pc &= ~1;
 			}
