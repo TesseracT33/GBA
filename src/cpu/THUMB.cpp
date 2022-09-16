@@ -589,6 +589,7 @@ namespace CPU
 			}
 			if (transfer_lr_pc) {
 				pc = Bus::Read<u32>(sp++) & ~1;
+				FlushPipeline();
 			}
 		}
 	}
@@ -609,6 +610,7 @@ namespace CPU
 			if (reg_list == 0) {
 				pc = Bus::Read<u32>(r[rb]);
 				r[rb] += 0x40;
+				FlushPipeline();
 			}
 			else {
 				for (int i = 0; i < 8; ++i) {
@@ -623,6 +625,7 @@ namespace CPU
 			if (reg_list == 0) {
 				pc = Bus::Read<u32>(r[rb]);
 				r[rb] += 0x40;
+				FlushPipeline();
 			}
 			else {
 				for (int i = 0; i < 8; ++i) {
@@ -644,6 +647,7 @@ namespace CPU
 		if (branch) {
 			s32 offset = SignExtend<s32, 9>(opcode << 1 & 0x1FE); /* [-256, 254] in steps of 2 */
 			pc += offset;
+			FlushPipeline();
 		}
 	}
 
@@ -658,6 +662,7 @@ namespace CPU
 	{
 		s32 offset = SignExtend<s32, 12>(opcode << 1 & 0xFFE); /* [-2048, 2046] in steps of 2 */
 		pc += offset;
+		FlushPipeline();
 	}
 
 
@@ -672,9 +677,10 @@ namespace CPU
 		else {
 			s32 offset = immediate << 1;
 			lr += offset;
-			auto tmp = pc;
+			auto prev_pc = pc;
 			pc = lr;
-			lr = (tmp - 2) | 1; /* the address of the instruction following the BL is placed in LR and bit 0 of LR is set */
+			lr = (prev_pc - 2) | 1; /* the address of the instruction following the BL is placed in LR and bit 0 of LR is set */
+			FlushPipeline();
 		}
 	}
 }
