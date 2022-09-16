@@ -378,21 +378,24 @@ namespace CPU
 
 	void HiReg(u16 opcode) /* Format 5: ADD, BX, CMP, MOV */
 	{
-		auto rd = opcode & 7;
 		auto rs = opcode >> 3 & 7;
 		auto h2 = opcode >> 6 & 1;
-		auto h1 = opcode >> 7 & 1;
 		auto op = opcode >> 8 & 3;
-		/* add 8 to register indeces if h flags are set */
-		rd += h1 << 3;
-		rs += h2 << 3;
+		rs += h2 << 3; /* add 8 to register indeces if h flags are set */
 		/* In this group only CMP (Op = 01) sets the CPSR condition codes. */
 		switch (op) {
-		case 0b00: /* ADD */
+		case 0b00: { /* ADD */
+			auto rd = opcode & 7;
+			auto h1 = opcode >> 7 & 1;
+			rd += h1 << 3;
 			r[rd] += r[rs];
 			break;
+		}
 
 		case 0b01: { /* CMP */
+			auto rd = opcode & 7;
+			auto h1 = opcode >> 7 & 1;
+			rd += h1 << 3;
 			auto result = r[rd] - r[rs];
 			cpsr.overflow = GetBit((r[rd] ^ result) & (r[rs] ^ result), 31);
 			cpsr.carry = r[rs] > r[rd];
@@ -401,9 +404,13 @@ namespace CPU
 			break;
 		}
 
-		case 0b10: /* MOV */
+		case 0b10: { /* MOV */
+			auto rd = opcode & 7;
+			auto h1 = opcode >> 7 & 1;
+			rd += h1 << 3;
 			r[rd] = r[rs];
 			break;
+		}
 
 		case 0b11: /* BX */
 			pc = r[rs];
