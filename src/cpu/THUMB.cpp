@@ -382,13 +382,21 @@ namespace CPU
 		auto h2 = opcode >> 6 & 1;
 		auto op = opcode >> 8 & 3;
 		rs += h2 << 3; /* add 8 to register indeces if h flags are set */
+		auto oper = r[rs];
+		if (rs == 15) { /* If R15 is used as an operand, the value will be the address of the instruction + 4 with bit 0 cleared. */
+			oper &= ~1;
+		}
 		/* In this group only CMP (Op = 01) sets the CPSR condition codes. */
 		switch (op) {
 		case 0b00: { /* ADD */
 			auto rd = opcode & 7;
 			auto h1 = opcode >> 7 & 1;
 			rd += h1 << 3;
-			r[rd] += r[rs];
+			r[rd] += oper;
+			if (rd == 15) {
+				pc &= ~1;
+				FlushPipeline();
+			}
 			break;
 		}
 
@@ -396,9 +404,9 @@ namespace CPU
 			auto rd = opcode & 7;
 			auto h1 = opcode >> 7 & 1;
 			rd += h1 << 3;
-			auto result = r[rd] - r[rs];
-			cpsr.overflow = GetBit((r[rd] ^ result) & (r[rs] ^ result), 31);
-			cpsr.carry = r[rs] > r[rd];
+			auto result = r[rd] - oper;
+			cpsr.overflow = GetBit((r[rd] ^ result) & (oper ^ result), 31);
+			cpsr.carry = oper > r[rd];
 			cpsr.zero = result == 0;
 			cpsr.negative = GetBit(result, 31);
 			break;
@@ -408,12 +416,16 @@ namespace CPU
 			auto rd = opcode & 7;
 			auto h1 = opcode >> 7 & 1;
 			rd += h1 << 3;
-			r[rd] = r[rs];
+			r[rd] = oper;
+			if (rd == 15) {
+				pc &= ~1;
+				FlushPipeline();
+			}
 			break;
 		}
 
 		case 0b11: /* BX */
-			pc = r[rs];
+			pc = oper;
 			if (pc & 1) { /* Bit 0 of the address determines the processor state on entry to the routine */
 				SetExecutionState(ExecutionState::THUMB);
 				pc &= ~1;
