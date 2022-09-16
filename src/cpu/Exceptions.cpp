@@ -38,6 +38,7 @@ namespace CPU
 	{
 		r14_abt = pc;
 		pc = exception_vector_data_abort;
+		FlushPipeline();
 		spsr_abt = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -49,6 +50,7 @@ namespace CPU
 	{
 		r14_fiq = pc;
 		pc = exception_vector_fiq;
+		FlushPipeline();
 		spsr_fiq = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = cpsr.fiq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -60,6 +62,7 @@ namespace CPU
 	{
 		r14_irq = pc;
 		pc = exception_vector_irq;
+		FlushPipeline();
 		spsr_irq = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -71,6 +74,7 @@ namespace CPU
 	{
 		r14_abt = pc;
 		pc = exception_vector_prefetch_abort;
+		FlushPipeline();
 		spsr_abt = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -82,6 +86,7 @@ namespace CPU
 	{
 		r14_svc = pc;
 		pc = exception_vector_reset;
+		FlushPipeline();
 		spsr_svc = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = cpsr.fiq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -93,6 +98,7 @@ namespace CPU
 	{
 		r14_svc = pc;
 		pc = exception_vector_software_int;
+		FlushPipeline();
 		spsr_svc = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
@@ -104,6 +110,7 @@ namespace CPU
 	{
 		r14_und = pc;
 		pc = exception_vector_undefined_instr;
+		FlushPipeline();
 		spsr_und = std::bit_cast<u32>(cpsr);
 		cpsr.irq_disable = 1;
 		SetExecutionState(ExecutionState::ARM);
