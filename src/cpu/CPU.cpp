@@ -41,17 +41,23 @@ namespace CPU
 		if (execution_state == ExecutionState::ARM) {
 			u32 cond = opcode >> 28;
 			bool execute_instruction = CheckCondition(cond);
+			if constexpr (log_instrs) {
+				pc_when_current_instr_fetched = pc - 8;
+			}
 			if (execute_instruction) {
 				DecodeExecuteARM(opcode);
 			}
 			if constexpr (log_instrs) {
-				Logging::LogInstruction(pc - 8, opcode, cond_strings[cond], execute_instruction, r, std::bit_cast<u32>(cpsr));
+				Logging::LogInstruction(pc_when_current_instr_fetched, opcode, cond_strings[cond], execute_instruction, r, std::bit_cast<u32>(cpsr));
 			}
 		}
 		else {
 			/* In THUMB mode, {cond} can be used only for branch opcodes. */
+			if constexpr (log_instrs) {
+				pc_when_current_instr_fetched = pc - 4;
+			}
 			DecodeExecuteTHUMB(opcode);
-			Logging::LogInstruction(pc - 4, opcode, r, std::bit_cast<u32>(cpsr));
+			Logging::LogInstruction(pc_when_current_instr_fetched, opcode, r, std::bit_cast<u32>(cpsr));
 		}
 	}
 

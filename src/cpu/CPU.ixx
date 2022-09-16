@@ -168,4 +168,7 @@ namespace CPU
 	uint occurred_exception_priority;
 
 	u64 cycle;
+
+	/// debugging
+	u32 pc_when_current_instr_fetched;
 }
