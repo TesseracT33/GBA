@@ -570,14 +570,15 @@ namespace CPU
 		auto reg_list = opcode & 0xFF;
 		bool transfer_lr_pc = opcode >> 8 & 1; /* 0: Do not store LR / load PC; 1: Store LR / Load PC */
 		bool load_or_store = opcode >> 11 & 1; /* 0: store; 1: load */
+		/* The lowest register gets transferred to/from the lowest memory address. */
 		if (load_or_store == 0) {
-			for (int i = 0; i < 8; ++i) {
+			if (transfer_lr_pc) {
+				Bus::Write<u32>(--sp, lr);
+			}
+			for (int i = 7; i >= 0; --i) {
 				if (reg_list & 1 << i) {
 					Bus::Write<u32>(--sp, r[i]);
 				}
-			}
-			if (transfer_lr_pc) {
-				Bus::Write<u32>(--sp, lr);
 			}
 		}
 		else {
