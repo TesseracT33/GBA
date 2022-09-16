@@ -310,19 +310,22 @@ namespace CPU
 
 		if constexpr (instr != CMN && instr != CMP && instr != TEQ && instr != TST) {
 			r[rd] = result;
+			if (rd == 15) {
+				FlushPipeline();
+			}
 		}
 
 		if (set_conds) {
 			if (rd == 15) {
 				if (cpsr.mode != cpsr_mode_bits_user && cpsr.mode != cpsr_mode_bits_system) {
 					switch (spsr & 0x1F) {
-					case cpsr_mode_bits_user: SetMode<Mode::User>(); break;
-					case cpsr_mode_bits_fiq: SetMode<Mode::Fiq>(); break;
-					case cpsr_mode_bits_irq: SetMode<Mode::Irq>(); break;
+					case cpsr_mode_bits_user:       SetMode<Mode::User>(); break;
+					case cpsr_mode_bits_fiq:        SetMode<Mode::Fiq>(); break;
+					case cpsr_mode_bits_irq:        SetMode<Mode::Irq>(); break;
 					case cpsr_mode_bits_supervisor: SetMode<Mode::Supervisor>(); break;
-					case cpsr_mode_bits_abort: SetMode<Mode::Abort>(); break;
-					case cpsr_mode_bits_undefined: SetMode<Mode::Undefined>(); break;
-					case cpsr_mode_bits_system: SetMode<Mode::System>(); break;
+					case cpsr_mode_bits_abort:      SetMode<Mode::Abort>(); break;
+					case cpsr_mode_bits_undefined:  SetMode<Mode::Undefined>(); break;
+					case cpsr_mode_bits_system:     SetMode<Mode::System>(); break;
 					default: assert(false); break;
 					}
 					SetExecutionState(static_cast<ExecutionState>(GetBit(spsr, 5)));
