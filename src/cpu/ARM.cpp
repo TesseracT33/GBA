@@ -72,6 +72,7 @@ namespace CPU
 		/* The registers are transferred in the order lowest to highest, so R15 (if in the list) will always be transferred last.
 		The lowest register also gets transferred to/from the lowest memory address. */
 		/* TODO: reduce code duplication */
+		/* TODO: registers are loaded in the wrong order when decrementing */
 		if (load_or_store == 0) {
 			if (load_psr_and_force_user_mode == 0) {
 				if (up_or_down == 0) {
@@ -153,10 +154,10 @@ namespace CPU
 						if (reg_list & 1 << i) {
 							r[i] = LoadReg();
 						}
-						if (reg_list & 1 << 15) {
-							r[15] = LoadReg();
-							FlushPipeline();
-						}
+					}
+					if (reg_list & 1 << 15) {
+						r[15] = LoadReg();
+						FlushPipeline();
 					}
 				}
 			}
