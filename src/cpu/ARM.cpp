@@ -276,7 +276,7 @@ namespace CPU
 		u32 op1 = r[rn];
 		u32 op2 = [&] {
 			if (reg_or_imm == 0) { /* register */
-				return GetSecondOperand(opcode);
+				return GetSecondOperand(opcode, set_conds);
 			}
 			else { /* immediate */
 				auto imm = opcode & 0xFF;
@@ -285,7 +285,9 @@ namespace CPU
 					return imm;
 				}
 				else {
-					cpsr.carry = imm >> (rot - 1) & 1;
+					if (set_conds) {
+						cpsr.carry = imm >> (rot - 1) & 1;
+					}
 					return std::rotr(imm, rot);
 				}
 			}
@@ -456,7 +458,8 @@ namespace CPU
 	}
 
 
-	u32 GetSecondOperand(u32 opcode)
+	/* TODO: possibly make this return carry instead of directly setting it */
+	u32 GetSecondOperand(u32 opcode, bool set_conds)
 	{
 		auto rm = opcode & 0xF;
 		auto shift_type = opcode >> 5 & 3;
@@ -477,41 +480,58 @@ namespace CPU
 				return r[rm];
 			}
 			else {
-				cpsr.carry = GetBit(r[rm], 32 - shift_amount);
+				if (set_conds) {
+					cpsr.carry = GetBit(r[rm], 32 - shift_amount);
+				}
 				return r[rm] << shift_amount;
 			}
 
 		case 0b01: /* logical right */
 			if (shift_amount == 0) {
 				/* LSR#0: Interpreted as LSR#32, ie. Op2 becomes zero, C becomes Bit 31 of Rm */
-				cpsr.carry = GetBit(r[rm], 31);
+				if (set_conds) {
+					cpsr.carry = GetBit(r[rm], 31);
+				}
 				return 0;
 			}
 			else {
-				cpsr.carry = GetBit(r[rm], shift_amount - 1);
+				if (set_conds) {
+					cpsr.carry = GetBit(r[rm], shift_amount - 1);
+				}
 				return u32(r[rm]) >> shift_amount;
 			}
 
 		case 0b10: /* arithmetic right */
 			if (shift_amount == 0) {
 				/* ASR#0: Interpreted as ASR#32, ie. Op2 and C are filled by Bit 31 of Rm. */
-				cpsr.carry = GetBit(r[rm], 31);
+				if (set_conds) {
+					cpsr.carry = GetBit(r[rm], 31);
+				}
 				return cpsr.carry ? 0xFFFF'FFFF : 0;
 			}
 			else {
-				cpsr.carry = GetBit(r[rm], shift_amount - 1);
+				if (set_conds) {
+					cpsr.carry = GetBit(r[rm], shift_amount - 1);
+				}
 				return s32(r[rm]) >> shift_amount;
 			}
 
 		case 0b11: /* rotate right */
 			if (shift_amount == 0) {
 				/* ROR#0: Interpreted as RRX#1 (RCR), like ROR#1, but Op2 Bit 31 set to old C. */
-				auto prev_carry = cpsr.carry;
-				cpsr.carry = r[rm] & 1;
-				return u32(r[rm]) >> 1 | prev_carry << 31;
+				if (set_conds) {
+					auto prev_carry = cpsr.carry;
+					cpsr.carry = r[rm] & 1;
+					return u32(r[rm]) >> 1 | prev_carry << 31;
+				}
+				else {
+					return u32(r[rm]) >> 1 | cpsr.carry << 31;
+				}
 			}
 			else {
-				cpsr.carry = r[rm] >> ((shift_amount - 1) & 0x1F) & 1;
+				if (set_conds) {
+					cpsr.carry = r[rm] >> ((shift_amount - 1) & 0x1F) & 1;
+				}
 				return std::rotr(r[rm], shift_amount);
 			}
 

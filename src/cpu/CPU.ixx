@@ -62,7 +62,7 @@ namespace CPU
 	void FlushPipeline();
 	template<Exception> ExceptionHandler GetExceptionHandler();
 	template<Exception> constexpr uint GetExceptionPriority();
-	u32 GetSecondOperand(u32 opcode);
+	u32 GetSecondOperand(u32 opcode, bool set_conds = true);
 	void HandleDataAbortException();
 	void HandleFiqException();
 	void HandleIrqException();
