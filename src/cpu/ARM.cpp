@@ -138,16 +138,24 @@ namespace CPU
 		else {
 			if (load_psr_and_force_user_mode == 0) {
 				if (up_or_down == 0) {
-					for (int i = 15; i >= 0; --i) {
+					if (reg_list & 1 << 15) {
+						r[15] = LoadReg();
+						FlushPipeline();
+					}
+					for (int i = 14; i >= 0; --i) {
 						if (reg_list & 1 << i) {
 							r[i] = LoadReg();
 						}
 					}
 				}
 				else {
-					for (int i = 0; i < 16; ++i) {
+					for (int i = 0; i < 15; ++i) {
 						if (reg_list & 1 << i) {
 							r[i] = LoadReg();
+						}
+						if (reg_list & 1 << 15) {
+							r[15] = LoadReg();
+							FlushPipeline();
 						}
 					}
 				}
@@ -155,18 +163,22 @@ namespace CPU
 			else {
 				if (reg_list & 1 << 15) {
 					if (up_or_down == 0) {
-						for (int i = 15; i >= 0; --i) {
+						r[15] = LoadReg();
+						FlushPipeline();
+						for (int i = 14; i >= 0; --i) {
 							if (reg_list & 1 << i) {
 								r[i] = LoadReg();
 							}
 						}
 					}
 					else {
-						for (int i = 0; i < 16; ++i) {
+						for (int i = 0; i < 15; ++i) {
 							if (reg_list & 1 << i) {
 								r[i] = LoadReg();
 							}
 						}
+						r[15] = LoadReg();
+						FlushPipeline();
 					}
 					cpsr = std::bit_cast<CPSR>(spsr);
 				}
@@ -175,6 +187,7 @@ namespace CPU
 					if (up_or_down == 0) {
 						if (reg_list & 1 << 15) {
 							r[15] = LoadReg();
+							FlushPipeline();
 						}
 						if (reg_list & 1 << 14) {
 							r14_usr = LoadReg();
@@ -212,6 +225,7 @@ namespace CPU
 						}
 						if (reg_list & 1 << 15) {
 							r[15] = LoadReg();
+							FlushPipeline();
 						}
 					}
 				}
