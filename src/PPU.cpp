@@ -4,6 +4,7 @@ import Bus;
 import DMA;
 import IRQ;
 import Scheduler;
+import Video;
 
 namespace PPU
 {
@@ -312,6 +313,11 @@ namespace PPU
 		palette_ram.fill(0);
 		vram.fill(0);
 		objects.clear();
+
+		framebuffer.resize(framebuffer_width * framebuffer_height * 3, 0);
+		Video::SetFramebufferPtr(framebuffer.data());
+		Video::SetFramebufferSize(framebuffer_width, framebuffer_height);
+		Video::SetPixelFormat(Video::PixelFormat::RGB888);
 	}
 
 
@@ -356,7 +362,7 @@ namespace PPU
 			if (dispstat.vblank_irq_enable) {
 				IRQ::Raise(IRQ::Source::VBlank);
 			}
-			framebuffer_index = 0;
+			Render();
 			DMA::OnVBlank();
 		}
 		else if (v_counter == total_num_lines - 1) {
@@ -464,6 +470,14 @@ namespace PPU
 			u16 hi = ReadHalf(addr + 2);
 			return lo | hi << 16;
 		}
+	}
+
+
+	void Render()
+	{
+		framebuffer_index = 0;
+		Scanline();
+		Video::NotifyNewGameFrameReady();
 	}
 
 
@@ -828,7 +842,7 @@ namespace PPU
 			if (!rotate_scale && double_size_obj_disable) {
 				continue;
 			}
-			u8 y_coord = oam[oam_addr] & 0xFF;
+			u8 y_coord = oam[oam_addr];
 			if (y_coord <= v_counter) {
 				u8 obj_shape = oam[oam_addr + 1] >> 6 & 3;
 				u8 obj_size = oam[oam_addr + 5] >> 6 & 3;

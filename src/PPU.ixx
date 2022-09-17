@@ -87,6 +87,7 @@ namespace PPU
 	void PushPixel(auto color_data);
 	void PushPixel(RGB rgb);
 	void PushPixel(u8 r, u8 g, u8 b);
+	void Render();
 	template<void(*RenderFun)(uint), bool vertical_mosaic> void RenderBackground(uint bg);
 	template<void(*RenderFun)(), bool vertical_mosaic> void RenderBackground(uint bg);
 	void RenderTransparentBackground(uint bg);
@@ -114,7 +115,9 @@ namespace PPU
 	constexpr uint cycles_until_hblank = 960;
 	constexpr uint cycles_until_set_hblank_flag = 1006;
 	constexpr uint dots_per_line = 240;
+	constexpr uint framebuffer_height = 160;
 	constexpr uint framebuffer_pitch = dots_per_line * 3;
+	constexpr uint framebuffer_width = 240;
 	constexpr uint lines_until_vblank = 160;
 	constexpr uint max_objects = 128;
 	constexpr uint total_num_lines = 228;
