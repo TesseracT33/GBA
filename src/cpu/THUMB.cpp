@@ -236,6 +236,7 @@ namespace CPU
 			cpsr.overflow = GetBit((r[rd] ^ imm) & (r[rd] ^ result), 31);
 			cpsr.carry = imm <= r[rd];
 			cpsr.negative = GetBit(result, 31);
+			cpsr.zero = result == 0;
 			break;
 		}
 
@@ -244,6 +245,7 @@ namespace CPU
 			cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
 			cpsr.carry = result > std::numeric_limits<u32>::max();
 			cpsr.negative = GetBit(result, 31);
+			cpsr.zero = result == 0;
 			r[rd] = u32(result);
 			break;
 		}
@@ -253,6 +255,7 @@ namespace CPU
 			cpsr.overflow = GetBit((r[rd] ^ imm) & (r[rd] ^ result), 31);
 			cpsr.carry = imm <= r[rd];
 			cpsr.negative = GetBit(result, 31);
+			cpsr.zero = result == 0;
 			r[rd] = result;
 			break;
 		}
@@ -260,8 +263,6 @@ namespace CPU
 		default:
 			std::unreachable();
 		}
-
-		cpsr.zero = r[rd] == 0;
 	}
 
 
@@ -458,7 +459,7 @@ namespace CPU
 	{
 		u32 offset = (opcode & 0xFF) << 2;
 		auto rd = opcode >> 8 & 7;
-		r[rd] = Bus::Read<u32>((pc & ~2) + offset);
+		r[rd] = Bus::Read<u32>((pc & ~2) + offset); /* The PC will be 4 bytes greater than the address of this instruction, but bit 1 of the PC is forced to 0 to ensure it is word aligned. */
 	}
 
 
