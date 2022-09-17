@@ -85,7 +85,9 @@ namespace Bus
 
 		case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
 			if constexpr (sizeof(Int) == 1) {
-				return Cartridge::ReadSram(addr);
+				return addr <= 0x0E00'FFFF
+					? Cartridge::ReadSram(addr)
+					: ReadOpenBus<Int>(addr);
 			}
 			else {
 				return ReadOpenBus<Int>(addr); /* TODO: what should happen? */

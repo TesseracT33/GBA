@@ -4,7 +4,8 @@ namespace Cartridge
 {
 	void Initialize()
 	{
-
+		sram.resize(0x10000, 0xFF); /* TODO: for now, SRAM is assumed to always exist and be 64 KiB */
+		sram_size_mask = 0xFFFF;
 	}
 
 
