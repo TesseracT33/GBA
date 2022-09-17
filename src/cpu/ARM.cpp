@@ -596,7 +596,10 @@ namespace CPU
 		default: /* 0b00: Single Data Swap */
 			std::unreachable();
 		}
-		if (w) {
+		/* In the case of post-indexed addressing, the write back bit is redundant and is always
+			set to zero, since the old base value can be retained if necessary by setting the offset
+			to zero. Therefore post-indexed data transfers always write back the modified base. */
+		if (w || !p) {
 			addr += !p * offset;
 			r[rn] = addr;
 		}
