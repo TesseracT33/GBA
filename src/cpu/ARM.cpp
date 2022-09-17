@@ -238,7 +238,7 @@ namespace CPU
 	{
 		auto rn = opcode & 0xF;
 		pc = r[rn];
-		if (rn & 1) { /* Bit 0 of rn determines the processor state on entry to the routine */
+		if (pc & 1) { /* Bit 0 of the address determines the processor state on entry to the routine */
 			SetExecutionState(ExecutionState::THUMB);
 			pc &= ~1;
 		}
