@@ -565,41 +565,54 @@ namespace CPU
 			offset = -offset;
 		}
 		auto addr = r[rn] + p * offset;
-		switch (sh) {
-		case 0b01: /* unsigned halfword */
-			if (l) {
+		if (l) {
+			switch (sh) {
+			case 0b01: /* unsigned halfword */
 				r[rd] = Bus::Read<u16>(addr);
-			}
-			else {
-				Bus::Write<u16>(addr, u16(r[rd]));
-			}
-			break;
+				break;
 
-		case 0b10: /* signed byte */
-			if (l) {
+			case 0b10: /* signed byte */
 				r[rd] = Bus::Read<s8>(addr);
-			}
-			else {
-				Bus::Write<s8>(addr, s8(r[rd]));
-			}
-			break;
+				break;
 
-		case 0b11: /* signed halfword */
-			if (l) {
+			case 0b11: /* signed halfword */
 				r[rd] = Bus::Read<s16>(addr);
-			}
-			else {
-				Bus::Write<s16>(addr, s16(r[rd]));
-			}
-			break;
+				break;
 
-		default: /* 0b00: Single Data Swap */
-			std::unreachable();
+			default: /* 0b00: Single Data Swap */
+				std::unreachable();
+			}
+			if (rd == 15) {
+				FlushPipeline();
+			}
+		}
+		else {
+			/* When R15 is the source register (Rd) of a register store (STR) instruction, the stored
+				value will be address of the instruction plus 12. */
+			auto src = r[rd] + (rd == 15 ? 4 : 0);
+			switch (sh) {
+			case 0b01: /* unsigned halfword */
+				Bus::Write<u16>(addr, u16(src));
+				break;
+
+			case 0b10: /* signed byte */
+				Bus::Write<s8>(addr, s8(src));
+				break;
+
+			case 0b11: /* signed halfword */
+				Bus::Write<s16>(addr, s16(src));
+				break;
+
+			default: /* 0b00: Single Data Swap */
+				std::unreachable();
+			}
 		}
 		/* In the case of post-indexed addressing, the write back bit is redundant and is always
 			set to zero, since the old base value can be retained if necessary by setting the offset
 			to zero. Therefore post-indexed data transfers always write back the modified base. */
 		if (w || !p) {
+			/* Write-back must not be specified if R15 is specified as the base register (Rn). */
+			/* TODO: what actually happens? */
 			addr += !p * offset;
 			r[rn] = addr;
 		}
@@ -616,6 +629,8 @@ namespace CPU
 		else {
 			r[rd] = spsr;  /* TODO: read from spsr in user/system modes? */
 		}
+		/* You must not specify R15 as the source or destination register. */
+		/* TODO: what actually happens? */
 	}
 
 
@@ -798,14 +813,21 @@ namespace CPU
 		auto addr = r[rn] + p * offset;
 		if (load_or_store) {
 			r[rd] = byte_or_word ? Bus::Read<u8>(addr) : Bus::Read<u32>(addr);
+			if (rd == 15) {
+				FlushPipeline();
+			}
 		}
 		else {
-			byte_or_word ? Bus::Write<u8>(addr, r[rd]) : Bus::Write<u32>(addr, r[rd]);
+			/* When R15 is the source register (Rd) of a register store (STR) instruction, the stored
+				value will be address of the instruction plus 12. */
+			auto src = r[rd] + (rd == 15 ? 4 : 0);
+			byte_or_word ? Bus::Write<u8>(addr, src) : Bus::Write<u32>(addr, src);
 		}
 		/* In the case of post-indexed addressing, the write back bit is redundant and is always
 			set to zero, since the old base value can be retained if necessary by setting the offset
 			to zero. Therefore post-indexed data transfers always write back the modified base. */
 		if (writeback || !p) {
+			/* Write-back must not be specified if R15 is specified as the base register (Rn). */
 			addr += !p * offset;
 			r[rn] = addr;
 		}
