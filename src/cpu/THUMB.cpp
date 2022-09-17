@@ -223,43 +223,43 @@ namespace CPU
 		auto rd = opcode >> 8 & 7;
 		auto op = opcode >> 11 & 3;
 
-		auto result = [&] {
-			switch (op) {
-			case 0b00: /* MOV */
-				cpsr.negative = 0;
-				return u32(imm);
+		switch (op) {
+		case 0b00: /* MOV */
+			cpsr.negative = 0;
+			r[rd] = imm;
+			break;
 
-			case 0b01: { /* CMP */
-				u32 result = r[rd] - imm;
-				cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
-				cpsr.carry = imm < r[rd];
-				cpsr.negative = GetBit(result, 31);
-				return result;
-			}
+		case 0b01: { /* CMP */
+			u32 result = r[rd] - imm;
+			cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
+			cpsr.carry = imm < r[rd];
+			cpsr.negative = GetBit(result, 31);
+			break;
+		}
 
-			case 0b10: { /* ADD */
-				u64 result = u64(r[rd]) + u64(imm);
-				cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
-				cpsr.carry = result > std::numeric_limits<u32>::max();
-				cpsr.negative = GetBit(result, 31);
-				return u32(result);
-			}
+		case 0b10: { /* ADD */
+			u64 result = u64(r[rd]) + u64(imm);
+			cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
+			cpsr.carry = result > std::numeric_limits<u32>::max();
+			cpsr.negative = GetBit(result, 31);
+			r[rd] = u32(result);
+			break;
+		}
 
-			case 0b11: { /* SUB */
-				u32 result = r[rd] - imm;
-				cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
-				cpsr.carry = imm < r[rd];
-				cpsr.negative = GetBit(result, 31);
-				return result;
-			}
+		case 0b11: { /* SUB */
+			u32 result = r[rd] - imm;
+			cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
+			cpsr.carry = imm < r[rd];
+			cpsr.negative = GetBit(result, 31);
+			r[rd] = result;
+			break;
+		}
 
-			default:
-				std::unreachable();
-			}
-		}();
+		default:
+			std::unreachable();
+		}
 
-		r[rd] = result;
-		cpsr.zero = result == 0;
+		cpsr.zero = r[rd] == 0;
 	}
 
 
