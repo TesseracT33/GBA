@@ -791,7 +791,6 @@ namespace CPU
 		bool up_or_down = opcode >> 23 & 1; /* 0 = subtract offset from base; 1 = add offset to base */
 		bool p = opcode >> 24 & 1; /* 0 = add offset after transfer; 1 = add offset before transfer */
 		bool reg_or_imm = opcode >> 25 & 1; /* 0 = offset is an immediate value; 1 = offset is a register */
-
 		s32 offset = [&] {
 			auto offset = reg_or_imm ? GetSecondOperand(opcode) : opcode & 0xFFF;
 			return up_or_down ? s32(offset) : -s32(offset);
@@ -803,7 +802,10 @@ namespace CPU
 		else {
 			byte_or_word ? Bus::Write<u8>(addr, r[rd]) : Bus::Write<u32>(addr, r[rd]);
 		}
-		if (writeback) {
+		/* In the case of post-indexed addressing, the write back bit is redundant and is always
+			set to zero, since the old base value can be retained if necessary by setting the offset
+			to zero. Therefore post-indexed data transfers always write back the modified base. */
+		if (writeback || !p) {
 			addr += !p * offset;
 			r[rn] = addr;
 		}
