@@ -338,10 +338,10 @@ namespace CPU
 				if constexpr (is_arithmetic_instr)          cpsr.overflow = GetBit((op1 ^ result) & (op2 ^ result), 31);
 				if constexpr (instr == ADC)                 cpsr.carry = u64(op1) + u64(op2) + u64(cpsr.carry) > std::numeric_limits<u32>::max();
 				if constexpr (instr == ADD || instr == CMN) cpsr.carry = std::numeric_limits<u32>::max() - u32(op1) < u32(op2);
-				if constexpr (instr == CMP || instr == SUB) cpsr.carry = op1 > op2; /* this is not borrow */
-				if constexpr (instr == RSB)                 cpsr.carry = op1 < op2;
-				if constexpr (instr == RSC)                 cpsr.carry = u64(op1) - u64(cpsr.carry) + u64(1) < u64(op2);
-				if constexpr (instr == SBC)                 cpsr.carry = u64(op2) - u64(cpsr.carry) + u64(1) < u64(op1);
+				if constexpr (instr == CMP || instr == SUB) cpsr.carry = op2 <= op1; /* this is not borrow */
+				if constexpr (instr == RSB)                 cpsr.carry = op1 <= op2;
+				if constexpr (instr == RSC)                 cpsr.carry = u64(op1) - u64(cpsr.carry) + u64(1) <= u64(op2);
+				if constexpr (instr == SBC)                 cpsr.carry = u64(op2) - u64(cpsr.carry) + u64(1) <= u64(op1);
 			}
 		}
 	}

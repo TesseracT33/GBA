@@ -205,7 +205,7 @@ namespace CPU
 				return u32(result);
 			}
 			else { /* SUB */
-				cpsr.carry = oper2 < oper1; /* this is not borrow */
+				cpsr.carry = oper2 <= oper1; /* this is not borrow */
 				return oper1 - oper2;
 			}
 		}();
@@ -232,7 +232,7 @@ namespace CPU
 		case 0b01: { /* CMP */
 			u32 result = r[rd] - imm;
 			cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
-			cpsr.carry = imm < r[rd];
+			cpsr.carry = imm <= r[rd];
 			cpsr.negative = GetBit(result, 31);
 			break;
 		}
@@ -249,7 +249,7 @@ namespace CPU
 		case 0b11: { /* SUB */
 			u32 result = r[rd] - imm;
 			cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
-			cpsr.carry = imm < r[rd];
+			cpsr.carry = imm <= r[rd];
 			cpsr.negative = GetBit(result, 31);
 			r[rd] = result;
 			break;
@@ -309,7 +309,7 @@ namespace CPU
 				return u32(result);
 			}
 			if constexpr (instr == CMP) {
-				cpsr.carry = op2 < op1;
+				cpsr.carry = op2 <= op1;
 				return op1 - op2;
 			}
 			if constexpr (instr == EOR) {
@@ -361,7 +361,7 @@ namespace CPU
 			}
 			if constexpr (instr == SBC) {
 				auto result = op1 - op2 - !cpsr.carry;
-				cpsr.carry = u64(op2) + u64(!cpsr.carry) < u64(op1);
+				cpsr.carry = u64(op2) + u64(!cpsr.carry) <= u64(op1);
 				return result;
 			}
 		}();
@@ -407,7 +407,7 @@ namespace CPU
 			rd += h1 << 3;
 			auto result = r[rd] - oper;
 			cpsr.overflow = GetBit((r[rd] ^ result) & (oper ^ result), 31);
-			cpsr.carry = oper < r[rd];
+			cpsr.carry = oper <= r[rd];
 			cpsr.zero = result == 0;
 			cpsr.negative = GetBit(result, 31);
 			break;
