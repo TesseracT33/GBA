@@ -202,16 +202,18 @@ namespace CPU
 			if (op == 0) { /* ADD */
 				u64 result = u64(oper1) + u64(oper2);
 				cpsr.carry = result > std::numeric_limits<u32>::max();
+				cpsr.overflow = GetBit((oper1 ^ result) & (oper2 ^ result), 31);
 				return u32(result);
 			}
 			else { /* SUB */
+				u32 result = oper1 - oper2;
 				cpsr.carry = oper2 <= oper1; /* this is not borrow */
-				return oper1 - oper2;
+				cpsr.overflow = GetBit((oper1 ^ oper2) & (oper1 ^ result), 31);
+				return result;
 			}
 		}();
 
 		r[rd] = result;
-		cpsr.overflow = GetBit((oper1 ^ result) & (oper2 ^ result), 31);
 		cpsr.zero = result == 0;
 		cpsr.negative = GetBit(result, 31);
 	}
@@ -231,7 +233,7 @@ namespace CPU
 
 		case 0b01: { /* CMP */
 			u32 result = r[rd] - imm;
-			cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
+			cpsr.overflow = GetBit((r[rd] ^ imm) & (r[rd] ^ result), 31);
 			cpsr.carry = imm <= r[rd];
 			cpsr.negative = GetBit(result, 31);
 			break;
@@ -248,7 +250,7 @@ namespace CPU
 
 		case 0b11: { /* SUB */
 			u32 result = r[rd] - imm;
-			cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
+			cpsr.overflow = GetBit((r[rd] ^ imm) & (r[rd] ^ result), 31);
 			cpsr.carry = imm <= r[rd];
 			cpsr.negative = GetBit(result, 31);
 			r[rd] = result;
@@ -267,6 +269,9 @@ namespace CPU
 	void AluOperation(u16 opcode) /* Format 4: ADC, AND, ASR, BIC, CMN, CMP, EOR, LSL, LSR, MUL, MVN, NEG, ORR, ROR, SBC, TST */
 	{
 		using enum ThumbAluInstruction;
+
+		static constexpr bool is_arithmetic_instr = instr == ADC || instr == CMN ||
+			instr == CMP || instr == NEG || instr == SBC;
 
 		auto rd = opcode & 7;
 		auto rs = opcode >> 3 & 7;
@@ -371,8 +376,13 @@ namespace CPU
 		}
 		cpsr.zero = result == 0;
 		cpsr.negative = GetBit(result, 31);
-		if constexpr (instr == ADC || instr == CMN || instr == CMP || instr == NEG || instr == SBC) {
-			cpsr.overflow = GetBit((op1 ^ result) & (op2 ^ result), 31);
+		if constexpr (is_arithmetic_instr) {
+			auto cond = [&] {
+				if constexpr (instr == ADC || instr == CMN) return (op1 ^ result) & (op2 ^ result);
+				if constexpr (instr == CMP || instr == SBC) return (op1 ^ op2) & (op1 ^ result);
+				if constexpr (instr == NEG)                 return op2 & result; /* SUB with op1 == 0 */
+			}();
+			cpsr.overflow = GetBit(cond, 31);
 		}
 	}
 
@@ -406,7 +416,7 @@ namespace CPU
 			auto h1 = opcode >> 7 & 1;
 			rd += h1 << 3;
 			auto result = r[rd] - oper;
-			cpsr.overflow = GetBit((r[rd] ^ result) & (oper ^ result), 31);
+			cpsr.overflow = GetBit((r[rd] ^ oper) & (r[rd] ^ result), 31);
 			cpsr.carry = oper <= r[rd];
 			cpsr.zero = result == 0;
 			cpsr.negative = GetBit(result, 31);
