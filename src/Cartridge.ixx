@@ -20,7 +20,6 @@ namespace Cartridge
 		void WriteSram(u32 addr, u8 data);
 	}
 
-	u32 rom_size_mask;
 	u32 sram_size_mask;
 
 	std::vector<u8> rom;

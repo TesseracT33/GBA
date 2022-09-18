@@ -14,8 +14,6 @@ namespace Cartridge
 		auto optional_vec = ReadFileIntoVector(path);
 		if (optional_vec) {
 			rom = optional_vec.value();
-			assert(std::has_single_bit(rom.size()));
-			rom_size_mask = rom.size() - 1;
 			return true;
 		}
 		else {
@@ -34,7 +32,7 @@ namespace Cartridge
 	template<std::integral Int>
 	Int ReadRom(u32 addr)
 	{
-		u32 offset = addr & 0x1FF'FFFF & rom_size_mask;
+		u32 offset = (addr & 0x1FF'FFFF) % rom.size(); /* TODO: expensive, but some test roms have size not power of two */
 		Int ret;
 		std::memcpy(&ret, rom.data() + offset, sizeof(Int));
 		return ret;
