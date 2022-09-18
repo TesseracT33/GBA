@@ -48,7 +48,9 @@ namespace APU
 			case Bus::ADDR_SOUND4CNT_H + 2:
 			case Bus::ADDR_SOUND4CNT_H + 3:
 			case Bus::ADDR_SOUNDBIAS:
+				return u8(0);
 			case Bus::ADDR_SOUNDBIAS + 1:
+				return u8(0x2);
 			case Bus::ADDR_SOUNDBIAS + 2:
 			case Bus::ADDR_SOUNDBIAS + 3:
 			case Bus::ADDR_WAVE_RAM:
@@ -67,17 +69,44 @@ namespace APU
 			case Bus::ADDR_WAVE_RAM + 13:
 			case Bus::ADDR_WAVE_RAM + 14:
 			case Bus::ADDR_WAVE_RAM + 15:
-				return 0;
-			default: return 0;
+				return u8(0);
+			default: return Bus::ReadOpenBus<u8>(addr);
 			}
 		};
 
 		auto ReadHalf = [](u32 addr) {
-			return 0;
-		};
-
-		auto ReadWord = [](u32 addr) {
-			return 0;
+			switch (addr) {
+			case Bus::ADDR_SOUND1CNT_L:
+			case Bus::ADDR_SOUND1CNT_H:
+			case Bus::ADDR_SOUND1CNT_X:
+			case Bus::ADDR_SOUND1CNT_X + 2:
+			case Bus::ADDR_SOUND2CNT_L:
+			case Bus::ADDR_SOUND2CNT_L + 2:
+			case Bus::ADDR_SOUND2CNT_H:
+			case Bus::ADDR_SOUND2CNT_H + 2:
+			case Bus::ADDR_SOUND3CNT_L:
+			case Bus::ADDR_SOUND3CNT_H:
+			case Bus::ADDR_SOUND3CNT_X:
+			case Bus::ADDR_SOUND3CNT_X + 2:
+			case Bus::ADDR_SOUND4CNT_L:
+			case Bus::ADDR_SOUND4CNT_L + 2:
+			case Bus::ADDR_SOUND4CNT_H:
+			case Bus::ADDR_SOUND4CNT_H + 2:
+				return u16(0);
+			case Bus::ADDR_SOUNDBIAS:
+				return u16(0x200);
+			case Bus::ADDR_SOUNDBIAS + 2:
+			case Bus::ADDR_WAVE_RAM:
+			case Bus::ADDR_WAVE_RAM + 2:
+			case Bus::ADDR_WAVE_RAM + 4:
+			case Bus::ADDR_WAVE_RAM + 6:
+			case Bus::ADDR_WAVE_RAM + 8:
+			case Bus::ADDR_WAVE_RAM + 10:
+			case Bus::ADDR_WAVE_RAM + 12:
+			case Bus::ADDR_WAVE_RAM + 14:
+				return u16(0);
+			default: return Bus::ReadOpenBus<u16>(addr);
+			}
 		};
 
 		if constexpr (sizeof(Int) == 1) {
@@ -87,7 +116,9 @@ namespace APU
 			return ReadHalf(addr);
 		}
 		if constexpr (sizeof(Int) == 4) {
-			return ReadWord(addr);
+			u16 lo = ReadHalf(addr);
+			u16 hi = ReadHalf(addr + 2);
+			return lo | hi << 16;
 		}
 	}
 
@@ -150,16 +181,39 @@ namespace APU
 			case Bus::ADDR_WAVE_RAM + 14:
 			case Bus::ADDR_WAVE_RAM + 15:
 				break;
-			default: break;
 			}
 		};
 
 		auto WriteHalf = [](u32 addr, u16 data) {
-			
-		};
-
-		auto WriteWord = [](u32 addr, u32 data) {
-			
+			switch (addr) {
+			case Bus::ADDR_SOUND1CNT_L:
+			case Bus::ADDR_SOUND1CNT_H:
+			case Bus::ADDR_SOUND1CNT_X:
+			case Bus::ADDR_SOUND1CNT_X + 2:
+			case Bus::ADDR_SOUND2CNT_L:
+			case Bus::ADDR_SOUND2CNT_L + 2:
+			case Bus::ADDR_SOUND2CNT_H:
+			case Bus::ADDR_SOUND2CNT_H + 2:
+			case Bus::ADDR_SOUND3CNT_L:
+			case Bus::ADDR_SOUND3CNT_H:
+			case Bus::ADDR_SOUND3CNT_X:
+			case Bus::ADDR_SOUND3CNT_X + 2:
+			case Bus::ADDR_SOUND4CNT_L:
+			case Bus::ADDR_SOUND4CNT_L + 2:
+			case Bus::ADDR_SOUND4CNT_H:
+			case Bus::ADDR_SOUND4CNT_H + 2:
+			case Bus::ADDR_SOUNDBIAS:
+			case Bus::ADDR_SOUNDBIAS + 2:
+			case Bus::ADDR_WAVE_RAM:
+			case Bus::ADDR_WAVE_RAM + 2:
+			case Bus::ADDR_WAVE_RAM + 4:
+			case Bus::ADDR_WAVE_RAM + 6:
+			case Bus::ADDR_WAVE_RAM + 8:
+			case Bus::ADDR_WAVE_RAM + 10:
+			case Bus::ADDR_WAVE_RAM + 12:
+			case Bus::ADDR_WAVE_RAM + 14:
+				break;
+			}
 		};
 
 		if constexpr (sizeof(Int) == 1) {
@@ -169,7 +223,8 @@ namespace APU
 			WriteHalf(addr, data);
 		}
 		if constexpr (sizeof(Int) == 4) {
-			WriteWord(addr, data);
+			WriteHalf(addr, data & 0xFFFF);
+			WriteHalf(addr + 2, data >> 16 & 0xFFFF);
 		}
 	}
 
