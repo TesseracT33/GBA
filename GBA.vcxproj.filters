@@ -122,9 +122,6 @@
     <ClCompile Include="src\APU.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\debug\DebugOptions.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\Scheduler.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -191,13 +188,16 @@
     <ClCompile Include="external\Humla\src\Video.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\debug\Logging.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="external\EmuUtils\src\Arithmetic.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Bios.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Debug.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Debug.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

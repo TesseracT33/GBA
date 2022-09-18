@@ -1,7 +1,7 @@
 module Scheduler;
 
 import CPU;
-import DebugOptions;
+import Debug;
 import DMA;
 import PPU;
 
@@ -79,6 +79,7 @@ namespace Scheduler
 	void Initialize()
 	{
 		global_time = 0;
+		drivers.clear();
 		events.clear();
 		PPU::AddInitialEvents();
 		EngageDriver(Driver::Cpu, CPU::Run, CPU::SuspendRun);

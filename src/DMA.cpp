@@ -2,7 +2,7 @@ module DMA;
 
 import Bus;
 import CPU;
-import DebugOptions;
+import Debug;
 
 namespace DMA
 {
@@ -111,7 +111,7 @@ namespace DMA
 			}
 			if (dma.control.repeat) {
 				dma.next_copy_is_repeat = true;
-				if constexpr (enable_asserts) {
+				if constexpr (Debug::enable_asserts) {
 					assert(dma.control.transfer_type != 0);
 				}
 			}

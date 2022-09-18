@@ -5,6 +5,8 @@ import Util;
 import <array>;
 import <concepts>;
 import <cstring>;
+import <optional>;
+import <string_view>;
 
 namespace Bus
 {
@@ -62,7 +64,7 @@ namespace Bus
 			ADDR_SOUND4CNT_L = 0x4000078,
 			ADDR_SOUND4CNT_H = 0x400007C,
 			ADDR_SOUNDCNT_L = 0x4000080,
-			ADDR_ADDR_SOUNDCNT_H = 0x4000082,
+			ADDR_SOUNDCNT_H = 0x4000082,
 			ADDR_SOUNDCNT_X = 0x4000084,
 			ADDR_SOUNDBIAS = 0x4000088,
 			ADDR_WAVE_RAM = 0x4000090,
@@ -120,7 +122,12 @@ namespace Bus
 			ADDR_HALTCNT = 0x4000301
 		};
 
+		enum class IoOperation {
+			Read, Write
+		};
+
 		void Initialize();
+		constexpr std::optional<std::string_view> IoAddrToStr(u32 addr);
 		template<std::integral Int> Int Read(u32 addr);
 		template<std::integral Int> Int ReadOpenBus(u32 addr);
 		template<std::integral Int> void Write(u32 addr, Int data);

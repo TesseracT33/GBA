@@ -1,7 +1,7 @@
 module Timers;
 
 import Bus;
-import DebugOptions;
+import Debug;
 
 namespace Timers
 {
@@ -222,7 +222,7 @@ namespace Timers
 
 	void Timer::UpdateCounter()
 	{ /* precondition: is_counting == true */
-		if constexpr (enable_asserts) {
+		if constexpr (Debug::enable_asserts) {
 			assert(is_counting);
 		}
 		Timer* t = this;

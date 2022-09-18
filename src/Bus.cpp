@@ -3,7 +3,7 @@ module Bus;
 import APU;
 import Bios;
 import Cartridge;
-import DebugOptions;
+import Debug;
 import DMA;
 import Keypad;
 import IRQ;
@@ -17,6 +17,119 @@ namespace Bus
 		waitcnt = 0;
 		board_wram.fill(0);
 		chip_wram.fill(0);
+	}
+
+
+	constexpr std::optional<std::string_view> IoAddrToStr(u32 addr)
+	{
+		switch (addr & ~1) { /* TODO: allow for non-halfword-aligned addresses */
+		case ADDR_DISPCNT: return "DISPCNT";
+		case ADDR_GREEN_SWAP: return "GREEN_SWAP";
+		case ADDR_DISPSTAT: return "DISPSTAT";
+		case ADDR_VCOUNT: return "VCOUNT";
+		case ADDR_BG0CNT: return "BG0CNT";
+		case ADDR_BG1CNT: return "BG1CNT";
+		case ADDR_BG2CNT: return "BG2CNT";
+		case ADDR_BG3CNT: return "BG3CNT";
+		case ADDR_BG0HOFS: return "BG0HOFS";
+		case ADDR_BG0VOFS: return "BG0VOFS";
+		case ADDR_BG1HOFS: return "BG1HOFS";
+		case ADDR_BG1VOFS: return "BG1VOFS";
+		case ADDR_BG2HOFS: return "BG2HOFS";
+		case ADDR_BG2VOFS: return "BG2VOFS";
+		case ADDR_BG3HOFS: return "BG3HOFS";
+		case ADDR_BG3VOFS: return "BG3VOFS";
+		case ADDR_BG2PA: return "BG2PA";
+		case ADDR_BG2PB: return "BG2PB";
+		case ADDR_BG2PC: return "BG2PC";
+		case ADDR_BG2PD: return "BG2PD";
+		case ADDR_BG2X: return "BG2X";
+		case ADDR_BG2Y: return "BG2Y";
+		case ADDR_BG3PA: return "BG3PA";
+		case ADDR_BG3PB: return "BG3PB";
+		case ADDR_BG3PC: return "BG3PC";
+		case ADDR_BG3PD: return "BG3PD";
+		case ADDR_BG3X: return "BG3X";
+		case ADDR_BG3Y: return "BG3Y";
+		case ADDR_WIN0H: return "WIN0H";
+		case ADDR_WIN1H: return "WIN1H";
+		case ADDR_WIN0V: return "WIN0V";
+		case ADDR_WIN1V: return "WIN1V";
+		case ADDR_WININ: return "WININ";
+		case ADDR_WINOUT: return "WINOUT";
+		case ADDR_MOSAIC: return "MOSAIC";
+		case ADDR_BLDCNT: return "BLDCNT";
+		case ADDR_BLDALPHA: return "BLDALPHA";
+		case ADDR_BLDY: return "BLDY";
+		/* Sound */
+		case ADDR_SOUND1CNT_L: return "SOUND1CNT_L";
+		case ADDR_SOUND1CNT_H: return "SOUND1CNT_H";
+		case ADDR_SOUND1CNT_X: return "SOUND1CNT_X";
+		case ADDR_SOUND2CNT_L: return "SOUND2CNT_L";
+		case ADDR_SOUND2CNT_H: return "SOUND2CNT_H";
+		case ADDR_SOUND3CNT_L: return "SOUND3CNT_L";
+		case ADDR_SOUND3CNT_H: return "SOUND3CNT_H";
+		case ADDR_SOUND3CNT_X: return "SOUND3CNT_X";
+		case ADDR_SOUND4CNT_L: return "SOUND4CNT_L";
+		case ADDR_SOUND4CNT_H: return "SOUND4CNT_H";
+		case ADDR_SOUNDCNT_L: return "SOUNDCNT_L";
+		case ADDR_SOUNDCNT_H: return "SOUNDCNT_H";
+		case ADDR_SOUNDCNT_X: return "SOUNDCNT_X";
+		case ADDR_SOUNDBIAS: return "SOUNDBIAS";
+		case ADDR_FIFO_A: return "FIFO_A";
+		case ADDR_FIFO_B: return "FIFO_B";
+		/* DMA */
+		case ADDR_DMA0SAD: return "DMA0SAD";
+		case ADDR_DMA0DAD: return "DMA0DAD";
+		case ADDR_DMA0CNT_L: return "DMA0CNT_L";
+		case ADDR_DMA0CNT_H: return "DMA0CNT_H";
+		case ADDR_DMA1SAD: return "DMA1SAD";
+		case ADDR_DMA1DAD: return "DMA1DAD";
+		case ADDR_DMA1CNT_L: return "DMA1CNT_L";
+		case ADDR_DMA1CNT_H: return "DMA1CNT_H";
+		case ADDR_DMA2SAD: return "DMA2SAD";
+		case ADDR_DMA2DAD: return "DMA2DAD";
+		case ADDR_DMA2CNT_L: return "DMA2CNT_L";
+		case ADDR_DMA2CNT_H: return "DMA2CNT_H";
+		case ADDR_DMA3SAD: return "DMA3SAD";
+		case ADDR_DMA3DAD: return "DMA3DAD";
+		case ADDR_DMA3CNT_L: return "DMA3CNT_L";
+		case ADDR_DMA3CNT_H: return "DMA3CNT_H";
+		/* Timers */
+		case ADDR_TM0CNT_L: return "TM0CNT_L";
+		case ADDR_TM0CNT_H: return "TM0CNT_H";
+		case ADDR_TM1CNT_L: return "TM1CNT_L";
+		case ADDR_TM1CNT_H: return "TM1CNT_H";
+		case ADDR_TM2CNT_L: return "TM2CNT_L";
+		case ADDR_TM2CNT_H: return "TM2CNT_H";
+		case ADDR_TM3CNT_L: return "TM3CNT_L";
+		case ADDR_TM3CNT_H: return "TM3CNT_H";
+		/* Serial #1 */
+		case ADDR_SIOMULTI0: return "SIOMULTI0";
+		case ADDR_SIOMULTI1: return "SIOMULTI1";
+		case ADDR_SIOMULTI2: return "SIOMULTI2";
+		case ADDR_SIOMULTI3: return "SIOMULTI3";
+		case ADDR_SIOCNT: return "SIOCNT";
+		case ADDR_SIOMLT_SEND: return "SIOMLT_SEND";
+		/* Keypad */
+		case ADDR_KEYINPUT: return "KEYINPUT";
+		case ADDR_KEYCNT: return "KEYCNT";
+		/* Serial #2 */
+		case ADDR_RCNT: return "RCNT";
+		case ADDR_IR: return "IR";
+		case ADDR_JOYCNT: return "JOYCNT";
+		case ADDR_JOY_RECV: return "JOY_RECV";
+		case ADDR_JOY_TRANS: return "JOY_TRANS";
+		case ADDR_JOYSTAT: return "JOYSTAT";
+		/* Interrupt; waitstate; power-down */
+		case ADDR_IE: return "IE";
+		case ADDR_IF: return "IF";
+		case ADDR_WAITCNT: return "WAITCNT";
+		case ADDR_IME: return "IME";
+		case ADDR_POSTFLG: return "POSTFLG";
+		case ADDR_HALTCNT: return "HALTCNT";
+		default: return {};
+		}
 	}
 
 
@@ -106,62 +219,69 @@ namespace Bus
 	{
 		/* Reads are aligned, and all regions start at word-aligned addresses, so there cannot be a cross-region read. */
 		/* TODO: measure if jump table will be faster */
-		if (addr < 0x400'0060) {
-			return PPU::ReadReg<Int>(addr);
-		}
-		else if (addr < 0x400'00B0) {
-			return APU::ReadReg<Int>(addr);
-		}
-		else if (addr < 0x400'0100) {
-			return DMA::ReadReg<Int>(addr);
-		}
-		else if (addr < 0x400'0120) {
-			return Timers::ReadReg<Int>(addr);
-		}
-		else if (addr < 0x400'0130) {
-			return 0; /* serial #1 */
-		}
-		else if (addr < 0x400'0134) {
-			return Keypad::ReadReg<Int>(addr);
-		}
-		else if (addr < 0x400'0200) {
-			return 0; /* serial #2 */
-		}
-		else {
-			auto ReadByte = [](u32 addr) {
-				switch (addr) {
-				case ADDR_IE:          return IRQ::ReadIE(0);
-				case ADDR_IE + 1:      return IRQ::ReadIE(1);
-				case ADDR_IF:          return IRQ::ReadIF(0);
-				case ADDR_IF + 1:      return IRQ::ReadIF(1);
-				case ADDR_IME:         return u8(IRQ::ReadIME());
-				case ADDR_IME + 1:     u8(0);
-				case ADDR_WAITCNT:     return GetByte(waitcnt, 0);
-				case ADDR_WAITCNT + 1: return GetByte(waitcnt, 1);
-				default: return ReadOpenBus<u8>(addr);
+		Int ret = [&] {
+			if (addr < 0x400'0060) {
+				return PPU::ReadReg<Int>(addr);
+			}
+			else if (addr < 0x400'00B0) {
+				return APU::ReadReg<Int>(addr);
+			}
+			else if (addr < 0x400'0100) {
+				return DMA::ReadReg<Int>(addr);
+			}
+			else if (addr < 0x400'0120) {
+				return Timers::ReadReg<Int>(addr);
+			}
+			else if (addr < 0x400'0130) {
+				return Int(0); /* serial #1 */
+			}
+			else if (addr < 0x400'0134) {
+				return Keypad::ReadReg<Int>(addr);
+			}
+			else if (addr < 0x400'0200) {
+				return Int(0); /* serial #2 */
+			}
+			else {
+				auto ReadByte = [](u32 addr) {
+					switch (addr) {
+					case ADDR_IE:          return IRQ::ReadIE(0);
+					case ADDR_IE + 1:      return IRQ::ReadIE(1);
+					case ADDR_IF:          return IRQ::ReadIF(0);
+					case ADDR_IF + 1:      return IRQ::ReadIF(1);
+					case ADDR_IME:         return u8(IRQ::ReadIME());
+					case ADDR_IME + 1:     u8(0);
+					case ADDR_WAITCNT:     return GetByte(waitcnt, 0);
+					case ADDR_WAITCNT + 1: return GetByte(waitcnt, 1);
+					default: return ReadOpenBus<u8>(addr);
+					}
+				};
+				auto ReadHalf = [](u32 addr) {
+					switch (addr) {
+					case ADDR_IE:      return IRQ::ReadIE();
+					case ADDR_IF:      return IRQ::ReadIF();
+					case ADDR_IME:     return IRQ::ReadIME();
+					case ADDR_WAITCNT: return waitcnt;
+					default: return ReadOpenBus<u16>(addr);
+					}
+				};
+				if constexpr (sizeof(Int) == 1) {
+					return Int(ReadByte(addr));
 				}
-			};
-			auto ReadHalf = [](u32 addr) {
-				switch (addr) {
-				case ADDR_IE:      return IRQ::ReadIE();
-				case ADDR_IF:      return IRQ::ReadIF();
-				case ADDR_IME:     return IRQ::ReadIME();
-				case ADDR_WAITCNT: return waitcnt;
-				default: return ReadOpenBus<u16>(addr);
+				if constexpr (sizeof(Int) == 2) {
+					return Int(ReadHalf(addr));
 				}
-			};
-			if constexpr (sizeof(Int) == 1) {
-				return ReadByte(addr);
+				if constexpr (sizeof(Int) == 4) {
+					u16 lo = ReadHalf(addr);
+					u16 hi = ReadHalf(addr + 2);
+					return Int(lo | hi << 16);
+				}
 			}
-			if constexpr (sizeof(Int) == 2) {
-				return ReadHalf(addr);
-			}
-			if constexpr (sizeof(Int) == 4) {
-				u16 lo = ReadHalf(addr);
-				u16 hi = ReadHalf(addr + 2);
-				return lo | hi << 16;
-			}
+		}();
+
+		if constexpr (Debug::log_io_reads) {
+			Debug::LogIoAccess<IoOperation::Read>(addr, ret);
 		}
+		return ret;
 	}
 
 
@@ -285,6 +405,10 @@ namespace Bus
 				WriteHalf(addr, data & 0xFFFF);
 				WriteHalf(addr + 2, data >> 16 & 0xFFFF);
 			}
+		}
+
+		if constexpr (Debug::log_io_writes) {
+			Debug::LogIoAccess<IoOperation::Write>(addr, data);
 		}
 	}
 

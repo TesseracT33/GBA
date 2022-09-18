@@ -6,11 +6,10 @@ import Bus;
 import Cartridge;
 import Core;
 import CPU;
-import DebugOptions;
+import Debug;
 import DMA;
 import IRQ;
 import Keypad;
-import Logging;
 import PPU;
 import Scheduler;
 import Timers;
@@ -75,8 +74,8 @@ export struct GBA : Core
 		PPU::Initialize();
 		Scheduler::Initialize();
 		Timers::Initialize();
-		if constexpr (log_instrs) {
-			Logging::Initialize("F:\\gba.log");
+		if constexpr (Debug::LoggingIsEnabled()) {
+			Debug::SetLogPath("F:\\gba.log");
 		}
 	}
 

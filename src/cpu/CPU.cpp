@@ -1,8 +1,7 @@
 module CPU;
 
 import Bus;
-import DebugOptions;
-import Logging;
+import Debug;
 import PPU;
 import Scheduler;
 
@@ -41,23 +40,25 @@ namespace CPU
 		if (execution_state == ExecutionState::ARM) {
 			u32 cond = opcode >> 28;
 			bool execute_instruction = CheckCondition(cond);
-			if constexpr (log_instrs) {
+			if constexpr (Debug::log_instrs) {
 				pc_when_current_instr_fetched = pc - 8;
 			}
 			if (execute_instruction) {
 				DecodeExecuteARM(opcode);
 			}
-			if constexpr (log_instrs) {
-				Logging::LogInstruction(pc_when_current_instr_fetched, opcode, cond_strings[cond], execute_instruction, r, std::bit_cast<u32>(cpsr));
+			if constexpr (Debug::log_instrs) {
+				Debug::LogInstruction(pc_when_current_instr_fetched, opcode, cond_strings[cond], execute_instruction, r, std::bit_cast<u32>(cpsr));
 			}
 		}
 		else {
 			/* In THUMB mode, {cond} can be used only for branch opcodes. */
-			if constexpr (log_instrs) {
+			if constexpr (Debug::log_instrs) {
 				pc_when_current_instr_fetched = pc - 4;
 			}
 			DecodeExecuteTHUMB(opcode);
-			Logging::LogInstruction(pc_when_current_instr_fetched, opcode, r, std::bit_cast<u32>(cpsr));
+			if constexpr (Debug::log_instrs) {
+				Debug::LogInstruction(pc_when_current_instr_fetched, opcode, r, std::bit_cast<u32>(cpsr));
+			}
 		}
 		if (exception_has_occurred) {
 			exception_handler();
