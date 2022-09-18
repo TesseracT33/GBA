@@ -3,6 +3,7 @@ module Bus;
 import APU;
 import Bios;
 import Cartridge;
+import DebugOptions;
 import DMA;
 import Keypad;
 import IRQ;
@@ -38,9 +39,7 @@ namespace Bus
 		switch (addr >> 24 & 0xF) {
 		case 0x0: /* 0000'0000-0000'3FFF   BIOS - System ROM */
 			if (addr <= 0x3FFF) {
-				Int ret;
-				std::memcpy(&ret, bios.data() + addr, sizeof(Int));
-				return ret;
+				return Bios::Read<Int>(addr);
 			}
 			else {
 				return ReadOpenBus<Int>(addr);

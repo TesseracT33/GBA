@@ -4,7 +4,7 @@ import GBA;
 
 import <memory>;
 
-int main(int argc, char** argv) /* Optional CLI argument: path to rom */
+int main(int argc, char** argv) /* Optional CLI arguments: path to rom, path to bios */
 {
 	std::shared_ptr<Core> core = std::make_shared<GBA>();
 	if (!Frontend::Initialize(core)) {
@@ -15,6 +15,10 @@ int main(int argc, char** argv) /* Optional CLI argument: path to rom */
 		auto rom_path = argv[1];
 		Frontend::LoadGame(rom_path);
 		boot_game_immediately = true;
+		if (argc >= 3) {
+			auto bios_path = argv[2];
+			Frontend::LoadBios(bios_path);
+		}
 	}
 	Frontend::RunGui(boot_game_immediately);
 	Frontend::Shutdown();

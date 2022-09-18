@@ -1,6 +1,7 @@
 export module GBA;
 
 import APU;
+import Bios;
 import Bus;
 import Cartridge;
 import Core;
@@ -64,6 +65,7 @@ export struct GBA : Core
 	void Initialize() override
 	{
 		APU::Initialize();
+		Bios::Initialize();
 		Bus::Initialize();
 		Cartridge::Initialize();
 		CPU::Initialize();
@@ -80,7 +82,7 @@ export struct GBA : Core
 
 	bool LoadBios(const std::string& path) override
 	{
-		return true;
+		return Bios::Load(path);
 	}
 
 	bool LoadRom(const std::string& path) override

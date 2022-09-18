@@ -143,6 +143,7 @@
     <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="external\EmuUtils\src\Arithmetic.ixx" />
     <ClCompile Include="external\EmuUtils\src\Bit.ixx" />
     <ClCompile Include="external\EmuUtils\src\Files.ixx" />
     <ClCompile Include="external\EmuUtils\src\Host.ixx" />
@@ -174,6 +175,7 @@
     <ClCompile Include="external\Humla\src\Video.ixx" />
     <ClCompile Include="src\APU.cpp" />
     <ClCompile Include="src\APU.ixx" />
+    <ClCompile Include="src\Bios.cpp" />
     <ClCompile Include="src\Bios.ixx" />
     <ClCompile Include="src\Bus.cpp" />
     <ClCompile Include="src\Bus.ixx" />

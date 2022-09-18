@@ -1,8 +1,26 @@
 export module Bios;
 
+import UserMessage;
 import Util;
 
 import <array>;
+import <concepts>;
+import <cstring>;
+import <string>;
+import <vector>;
+
+namespace Bios
+{
+export
+{
+	void Initialize();
+	bool Load(const std::string& path);
+	template<std::integral Int> Int Read(u32 addr);
+	void SetDefault();
+}
+
+const u8* bios_ptr;
+std::vector<u8> custom_bios;
 
 ////////////////////////////////////////////////////////////////////////
 // Cult-of-GBA replacement bios                                       //
@@ -11,7 +29,7 @@ import <array>;
 // Source: https://github.com/Cult-of-GBA/BIOS/commit/                //
 // Commit-Hash: 7294810c9220a80e7d1be1a8d63c6fe3eaba32db              //
 ////////////////////////////////////////////////////////////////////////
-export constexpr std::array<u8, 0x4000> bios = {
+constexpr std::array<u8, 0x4000> default_bios = {
 	0x06, 0x00, 0x00, 0xEA, 0x5A, 0x00, 0x00, 0xEA, 0x46, 0x00, 0x00, 0xEA,
 	0x59, 0x00, 0x00, 0xEA, 0x58, 0x00, 0x00, 0xEA, 0x57, 0x00, 0x00, 0xEA,
 	0x3C, 0x00, 0x00, 0xEA, 0x55, 0x00, 0x00, 0xEA, 0x01, 0x03, 0xA0, 0xE3,
@@ -1379,3 +1397,5 @@ export constexpr std::array<u8, 0x4000> bios = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00
 };
+
+} // namespace Bios
