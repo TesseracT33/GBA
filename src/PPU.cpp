@@ -409,6 +409,34 @@ namespace PPU
 
 
 	template<std::integral Int>
+	Int ReadOam(u32 addr)
+	{
+		if (dispcnt.forced_blank || in_vblank || in_hblank && dispcnt.hblank_interval_free) {
+			Int ret;
+			std::memcpy(&ret, oam.data() + (addr & 0x3FF), sizeof(Int));
+			return ret;
+		}
+		else {
+			return Int(-1);
+		}
+	}
+
+
+	template<std::integral Int>
+	Int ReadPaletteRam(u32 addr)
+	{
+		if (dispcnt.forced_blank || in_vblank || in_hblank) {
+			Int ret;
+			std::memcpy(&ret, palette_ram.data() + (addr & 0x3FF), sizeof(Int));
+			return ret;
+		}
+		else {
+			return Int(-1);
+		}
+	}
+
+
+	template<std::integral Int>
 	Int ReadReg(u32 addr)
 	{
 		auto ReadByte = [](u32 addr) {
@@ -469,6 +497,20 @@ namespace PPU
 			u16 lo = ReadHalf(addr);
 			u16 hi = ReadHalf(addr + 2);
 			return lo | hi << 16;
+		}
+	}
+
+
+	template<std::integral Int>
+	Int ReadVram(u32 addr)
+	{
+		if (dispcnt.forced_blank || in_vblank || in_hblank) {
+			Int ret;
+			std::memcpy(&ret, vram.data() + (addr % 0x18000), sizeof(Int));
+			return ret;
+		}
+		else {
+			return Int(-1);
 		}
 	}
 
@@ -893,6 +935,24 @@ namespace PPU
 
 
 	template<std::integral Int>
+	void WriteOam(u32 addr, Int data)
+	{
+		if (dispcnt.forced_blank || in_vblank || in_hblank && dispcnt.hblank_interval_free) {
+			std::memcpy(oam.data() + (addr & 0x3FF), &data, sizeof(Int));
+		}
+	}
+
+
+	template<std::integral Int>
+	void WritePaletteRam(u32 addr, Int data)
+	{
+		if (dispcnt.forced_blank || in_vblank || in_hblank) {
+			std::memcpy(palette_ram.data() + (addr & 0x3FF), &data, sizeof(Int));
+		}
+	}
+
+
+	template<std::integral Int>
 	void WriteReg(u32 addr, Int data)
 	{
 		auto WriteByte = [](u32 addr, u8 data) {
@@ -1039,6 +1099,41 @@ namespace PPU
 	}
 
 
+	template<std::integral Int>
+	void WriteVram(u32 addr, Int data)
+	{
+		if (dispcnt.forced_blank || in_vblank || in_hblank) {
+			std::memcpy(vram.data() + (addr % 0x18000), &data, sizeof(Int));
+		}
+	}
+
+
+	template u8 ReadOam<u8>(u32);
+	template s8 ReadOam<s8>(u32);
+	template u16 ReadOam<u16>(u32);
+	template s16 ReadOam<s16>(u32);
+	template u32 ReadOam<u32>(u32);
+	template s32 ReadOam<s32>(u32);
+	template void WriteOam<u8>(u32, u8);
+	template void WriteOam<s8>(u32, s8);
+	template void WriteOam<u16>(u32, u16);
+	template void WriteOam<s16>(u32, s16);
+	template void WriteOam<u32>(u32, u32);
+	template void WriteOam<s32>(u32, s32);
+
+	template u8 ReadPaletteRam<u8>(u32);
+	template s8 ReadPaletteRam<s8>(u32);
+	template u16 ReadPaletteRam<u16>(u32);
+	template s16 ReadPaletteRam<s16>(u32);
+	template u32 ReadPaletteRam<u32>(u32);
+	template s32 ReadPaletteRam<s32>(u32);
+	template void WritePaletteRam<u8>(u32, u8);
+	template void WritePaletteRam<s8>(u32, s8);
+	template void WritePaletteRam<u16>(u32, u16);
+	template void WritePaletteRam<s16>(u32, s16);
+	template void WritePaletteRam<u32>(u32, u32);
+	template void WritePaletteRam<s32>(u32, s32);
+
 	template u8 ReadReg<u8>(u32);
 	template s8 ReadReg<s8>(u32);
 	template u16 ReadReg<u16>(u32);
@@ -1051,4 +1146,17 @@ namespace PPU
 	template void WriteReg<s16>(u32, s16);
 	template void WriteReg<u32>(u32, u32);
 	template void WriteReg<s32>(u32, s32);
+
+	template u8 ReadVram<u8>(u32);
+	template s8 ReadVram<s8>(u32);
+	template u16 ReadVram<u16>(u32);
+	template s16 ReadVram<s16>(u32);
+	template u32 ReadVram<u32>(u32);
+	template s32 ReadVram<s32>(u32);
+	template void WriteVram<u8>(u32, u8);
+	template void WriteVram<s8>(u32, s8);
+	template void WriteVram<u16>(u32, u16);
+	template void WriteVram<s16>(u32, s16);
+	template void WriteVram<u32>(u32, u32);
+	template void WriteVram<s32>(u32, s32);
 }
