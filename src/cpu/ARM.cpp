@@ -491,44 +491,51 @@ namespace CPU
 		switch (shift_type) {
 		case 0b00: /* logical left */
 			if (shift_amount == 0) {
-				/* LSL#0: No shift performed, ie. directly Op2=Rm, the C flag is NOT affected. */
+				/* LSL#0: No shift performed. The C flag is NOT affected. */
 				return r[rm];
 			}
-			else {
+			else if (shift_amount < 32) {
 				if (set_conds) {
 					cpsr.carry = GetBit(r[rm], 32 - shift_amount);
 				}
 				return r[rm] << shift_amount;
 			}
-
-		case 0b01: /* logical right */
-			if (shift_amount == 0) {
-				/* LSR#0: Interpreted as LSR#32, ie. Op2 becomes zero, C becomes Bit 31 of Rm */
+			else {
 				if (set_conds) {
-					cpsr.carry = GetBit(r[rm], 31);
+					cpsr.carry = shift_amount == 32 ? GetBit(r[rm], 0) : 0;
 				}
 				return 0;
 			}
-			else {
+
+		case 0b01: /* logical right */
+			if (shift_amount > 0 && shift_amount < 32) {
 				if (set_conds) {
 					cpsr.carry = GetBit(r[rm], shift_amount - 1);
 				}
 				return u32(r[rm]) >> shift_amount;
 			}
+			else {
+				/* LSR#0: Interpreted as LSR#32, ie. result becomes zero, C becomes Bit 31 of the input */
+				if (set_conds) {
+					cpsr.carry = shift_amount > 32 ? 0 : GetBit(r[rm], 31);
+				}
+				return 0;
+			}
 
 		case 0b10: /* arithmetic right */
-			if (shift_amount == 0) {
-				/* ASR#0: Interpreted as ASR#32, ie. Op2 and C are filled by Bit 31 of Rm. */
-				if (set_conds) {
-					cpsr.carry = GetBit(r[rm], 31);
-				}
-				return cpsr.carry ? 0xFFFF'FFFF : 0;
-			}
-			else {
+			if (shift_amount > 0 && shift_amount < 32) {
 				if (set_conds) {
 					cpsr.carry = GetBit(r[rm], shift_amount - 1);
 				}
 				return s32(r[rm]) >> shift_amount;
+			}
+			else { 
+				/* ASR#0: Interpreted as ASR#32, ie. the result and C are filled by Bit 31 of the input. */
+				bool bit31 = GetBit(r[rm], 31);
+				if (set_conds) {
+					cpsr.carry = bit31;
+				}
+				return bit31 ? 0xFFFF'FFFF : 0;
 			}
 
 		case 0b11: /* rotate right */

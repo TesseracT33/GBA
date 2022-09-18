@@ -298,12 +298,15 @@ namespace CPU
 			}
 			if constexpr (instr == ASR) {
 				auto shift_amount = op2 & 0xFF;
-				if (shift_amount > 0) {
+				if (shift_amount > 0 && shift_amount < 32) {
 					cpsr.carry = GetBit(op1, shift_amount - 1);
 					return u32(s32(op1) >> shift_amount);
 				}
 				else {
-					return op1;
+					/* ASR#0: Interpreted as ASR#32, ie. the result and C are filled by Bit 31 of the input. */
+					bool bit31 = GetBit(op1, 31);
+					cpsr.carry = bit31;
+					return bit31 ? 0xFFFF'FFFFu : 0u;
 				}
 			}
 			if constexpr (instr == BIC) {
@@ -323,22 +326,29 @@ namespace CPU
 			}
 			if constexpr (instr == LSL) {
 				auto shift_amount = op2 & 0xFF;
-				if (shift_amount > 0) {
-					cpsr.carry = shift_amount <= 32 ? GetBit(op1, 32 - shift_amount) : 0;
+				if (shift_amount == 0) {
+					/* LSL#0: No shift performed. The C flag is NOT affected. */
+					return op1;
+				}
+				else if (shift_amount < 32) {
+					cpsr.carry = GetBit(op1, 32 - shift_amount);
 					return op1 << shift_amount;
 				}
 				else {
-					return op1;
+					cpsr.carry = shift_amount == 32 ? GetBit(op1, 0) : 0;
+					return 0u;
 				}
 			}
 			if constexpr (instr == LSR) {
-				auto shift_amount = op2 & 0xFF;
-				if (shift_amount > 0) {
+				auto shift_amount = op1 & 0xFF;
+				if (shift_amount > 0 && shift_amount < 32) {
 					cpsr.carry = GetBit(op1, shift_amount - 1);
 					return u32(op1) >> shift_amount;
 				}
 				else {
-					return op1;
+					/* LSR#0: Interpreted as LSR#32, ie. result becomes zero, C becomes Bit 31 of Rm */
+					cpsr.carry = shift_amount > 32 ? 0 : GetBit(op1, 31);
+					return 0u;
 				}
 			}
 			if constexpr (instr == MUL) {
@@ -361,7 +371,7 @@ namespace CPU
 					cpsr.carry = op1 >> ((shift_amount - 1) & 0x1F) & 1;
 					return std::rotr(op1, shift_amount);
 				}
-				else {
+				else { /* TODO: does this become RRX#1 like in ARM? */
 					return op1;
 				}
 			}
