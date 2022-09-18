@@ -761,7 +761,7 @@ namespace PPU
 	void ScanlineBackgroundBitmapMode3()
 	{
 		constexpr static uint col_size = 2;
-		constexpr static uint bytes_per_scanline = total_num_lines * col_size;
+		constexpr static uint bytes_per_scanline = dots_per_line * col_size;
 		const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
 		for (uint dot = 0; dot < dots_per_line; ) {
 			BgColorData col;
@@ -777,11 +777,11 @@ namespace PPU
 	void ScanlineBackgroundBitmapMode4()
 	{
 		constexpr static uint col_size = 2;
-		constexpr static uint bytes_per_scanline = total_num_lines;
+		constexpr static uint bytes_per_scanline = dots_per_line;
 		const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
 		const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
 		for (uint dot = 0; dot < dots_per_line; ) {
-			uint palette_index = vram[vram_frame_offset + v_counter * bytes_per_scanline + dot];
+			u8 palette_index = vram[vram_frame_offset + v_counter * bytes_per_scanline + dot];
 			BgColorData col;
 			std::memcpy(&col, palette_ram.data() + palette_index * col_size, col_size);
 			col.transparent = palette_index == 0;
@@ -796,7 +796,7 @@ namespace PPU
 	{
 		/* TODO: can objects be drawn around the background? Probably yes */
 		constexpr static uint col_size = 2;
-		constexpr static uint bytes_per_scanline = total_num_lines * col_size;
+		constexpr static uint bytes_per_scanline = dots_per_line * col_size;
 		const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
 		const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
 		uint dot = 0;
