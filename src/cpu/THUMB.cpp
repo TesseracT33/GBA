@@ -280,6 +280,10 @@ namespace CPU
 		auto op1 = r[rd];
 		auto op2 = r[rs];
 
+		if (!(op2 & 0xFF)) {
+			int a = 3;
+		}
+
 		/* Affected Flags:
 			N,Z,C,V for  ADC,SBC,NEG,CMP,CMN
 			N,Z,C   for  LSL,LSR,ASR,ROR (carry flag unchanged if zero shift amount)
@@ -298,13 +302,16 @@ namespace CPU
 				return op1 & op2;
 			}
 			if constexpr (instr == ASR) {
+				/* The behavior for when shift_amount == 0 is different than ARM */
 				auto shift_amount = op2 & 0xFF;
-				if (shift_amount > 0 && shift_amount < 32) {
+				if (shift_amount == 0) {
+					return op1;
+				}
+				else if (shift_amount < 32) {
 					cpsr.carry = GetBit(op1, shift_amount - 1);
 					return u32(s32(op1) >> shift_amount);
 				}
 				else {
-					/* ASR#0: Interpreted as ASR#32, ie. the result and C are filled by Bit 31 of the input. */
 					bool bit31 = GetBit(op1, 31);
 					cpsr.carry = bit31;
 					return bit31 ? 0xFFFF'FFFFu : 0u;
@@ -328,7 +335,6 @@ namespace CPU
 			if constexpr (instr == LSL) {
 				auto shift_amount = op2 & 0xFF;
 				if (shift_amount == 0) {
-					/* LSL#0: No shift performed. The C flag is NOT affected. */
 					return op1;
 				}
 				else if (shift_amount < 32) {
@@ -342,12 +348,14 @@ namespace CPU
 			}
 			if constexpr (instr == LSR) {
 				auto shift_amount = op2 & 0xFF;
-				if (shift_amount > 0 && shift_amount < 32) {
+				if (shift_amount == 0) {
+					return op1;
+				}
+				else if (shift_amount < 32) {
 					cpsr.carry = GetBit(op1, shift_amount - 1);
 					return u32(op1) >> shift_amount;
 				}
 				else {
-					/* LSR#0: Interpreted as LSR#32, ie. result becomes zero, C becomes Bit 31 of Rm */
 					cpsr.carry = shift_amount > 32 ? 0 : GetBit(op1, 31);
 					return 0u;
 				}
@@ -368,12 +376,12 @@ namespace CPU
 			}
 			if constexpr (instr == ROR) {
 				auto shift_amount = op2 & 0xFF;
-				if (shift_amount > 0) {
+				if (shift_amount == 0) {
+					return op1;
+				}
+				else {
 					cpsr.carry = op1 >> ((shift_amount - 1) & 0x1F) & 1;
 					return std::rotr(op1, shift_amount);
-				}
-				else { /* TODO: does this become RRX#1 like in ARM? */
-					return op1;
 				}
 			}
 			if constexpr (instr == SBC) {
