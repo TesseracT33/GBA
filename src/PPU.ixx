@@ -87,6 +87,7 @@ namespace PPU
 	void PushPixel(auto color_data);
 	void PushPixel(RGB rgb);
 	void PushPixel(u8 r, u8 g, u8 b);
+	RGB Rgb555ToRgb888(RGB rgb);
 	template<void(*RenderFun)(uint), bool vertical_mosaic> void RenderBackground(uint bg);
 	template<void(*RenderFun)(), bool vertical_mosaic> void RenderBackground(uint bg);
 	void RenderTransparentBackground(uint bg);

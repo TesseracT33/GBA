@@ -39,7 +39,7 @@ namespace PPU
 		auto GetNextTopmostOpaqueBgLayer = [&](uint dot) -> int {
 			auto it = std::find_if(bg_by_prio.begin() + bg_skip, bg_by_prio.end(), [&](int bg) {
 				++bg_skip;
-				if (!(dispcnt.screen_display_bg & 1 << bg) || bg_render[bg][dot].transparent) {
+				if (!GetBit(dispcnt.screen_display_bg, bg) || bg_render[bg][dot].transparent) {
 					return false;
 				}
 				if (win0_active) {
@@ -238,7 +238,7 @@ namespace PPU
 					}
 				}
 			}
-			PushPixel(rgb_1st_layer);
+			PushPixel(Rgb555ToRgb888(rgb_1st_layer));
 		}
 	}
 
@@ -638,6 +638,17 @@ namespace PPU
 		}
 
 		BlendLayers();
+	}
+
+
+	RGB Rgb555ToRgb888(RGB rgb)
+	{
+		/* Convert each 5-bit channel to 8-bit channels (https://github.com/mattcurrie/dmg-acid2) */
+		return {
+			.r = u8(rgb.r << 3 | rgb.r >> 2),
+			.g = u8(rgb.g << 3 | rgb.g >> 2),
+			.b = u8(rgb.b << 3 | rgb.b >> 2)
+		};
 	}
 
 
