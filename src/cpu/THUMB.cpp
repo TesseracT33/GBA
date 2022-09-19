@@ -246,7 +246,7 @@ namespace CPU
 			cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
 			cpsr.carry = result > std::numeric_limits<u32>::max();
 			cpsr.negative = GetBit(result, 31);
-			cpsr.zero = result == 0;
+			cpsr.zero = u32(result) == 0;
 			r[rd] = u32(result);
 			break;
 		}
