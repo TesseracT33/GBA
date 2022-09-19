@@ -227,8 +227,9 @@ namespace CPU
 
 		switch (op) {
 		case 0b00: /* MOV */
-			cpsr.negative = 0;
 			r[rd] = imm;
+			cpsr.negative = 0;
+			cpsr.zero = r[rd] == 0;
 			break;
 
 		case 0b01: { /* CMP */
