@@ -947,18 +947,20 @@ namespace PPU
 	template<std::integral Int>
 	void WriteOam(u32 addr, Int data)
 	{
-		if (dispcnt.forced_blank || in_vblank || in_hblank && dispcnt.hblank_interval_free) {
-			std::memcpy(oam.data() + (addr & 0x3FF), &data, sizeof(Int));
-		}
+		std::memcpy(oam.data() + (addr & 0x3FF), &data, sizeof(Int));
+		//if (dispcnt.forced_blank || in_vblank || in_hblank && dispcnt.hblank_interval_free) {
+		//	std::memcpy(oam.data() + (addr & 0x3FF), &data, sizeof(Int));
+		//}
 	}
 
 
 	template<std::integral Int>
 	void WritePaletteRam(u32 addr, Int data)
 	{
-		if (dispcnt.forced_blank || in_vblank || in_hblank) {
-			std::memcpy(palette_ram.data() + (addr & 0x3FF), &data, sizeof(Int));
-		}
+		std::memcpy(palette_ram.data() + (addr & 0x3FF), &data, sizeof(Int));
+		//if (dispcnt.forced_blank || in_vblank || in_hblank) {
+		//	std::memcpy(palette_ram.data() + (addr & 0x3FF), &data, sizeof(Int));
+		//}
 	}
 
 
@@ -1112,9 +1114,10 @@ namespace PPU
 	template<std::integral Int>
 	void WriteVram(u32 addr, Int data)
 	{
-		if (dispcnt.forced_blank || in_vblank || in_hblank) {
-			std::memcpy(vram.data() + (addr % 0x18000), &data, sizeof(Int));
-		}
+		std::memcpy(vram.data() + (addr % 0x18000), &data, sizeof(Int));
+		//if (dispcnt.forced_blank || in_vblank || in_hblank) {
+		//	std::memcpy(vram.data() + (addr % 0x18000), &data, sizeof(Int));
+		//}
 	}
 
 
