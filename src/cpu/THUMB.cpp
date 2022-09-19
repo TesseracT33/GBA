@@ -341,7 +341,7 @@ namespace CPU
 				}
 			}
 			if constexpr (instr == LSR) {
-				auto shift_amount = op1 & 0xFF;
+				auto shift_amount = op2 & 0xFF;
 				if (shift_amount > 0 && shift_amount < 32) {
 					cpsr.carry = GetBit(op1, shift_amount - 1);
 					return u32(op1) >> shift_amount;
