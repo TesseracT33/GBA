@@ -87,11 +87,10 @@ namespace PPU
 	void PushPixel(auto color_data);
 	void PushPixel(RGB rgb);
 	void PushPixel(u8 r, u8 g, u8 b);
-	void Render();
 	template<void(*RenderFun)(uint), bool vertical_mosaic> void RenderBackground(uint bg);
 	template<void(*RenderFun)(), bool vertical_mosaic> void RenderBackground(uint bg);
 	void RenderTransparentBackground(uint bg);
-	void Scanline();
+	void RenderScanline();
 	void ScanlineBackgroundRotateScaleMode(uint bg);
 	void ScanlineBackgroundTextMode(uint bg);
 	void ScanlineBackgroundBitmapMode3();
@@ -132,7 +131,7 @@ namespace PPU
 		u16 hblank_interval_free : 1; /* 1=Allow access to OAM during H-Blank */
 		u16 obj_char_vram_mapping : 1; /* 0=Two dimensional, 1=One dimensional */
 		u16 forced_blank : 1; /* 1=Allow FAST access to VRAM,Palette,OAM */
-		u16 screen_display_bg : 4; /* 0=Off, 1=On */
+		u16 screen_display_bg : 4; /* 0=Off, 1=On (bg 0,1,2,3) */
 		u16 screen_display_obj : 1; /* 0=Off, 1=On */
 		u16 win0_display : 1; /* 0=Off, 1=On */
 		u16 win1_display : 1; /* 0=Off, 1=On */

@@ -34,11 +34,12 @@ namespace PPU
 		bool win0_active = false;
 		bool win1_active = false;
 		bool obj_win_active = false;
+		uint bg_skip;
 
-		auto GetNextTopmostOpaqueBgLayer = [&, skip = 0](uint dot) mutable -> int {
-			auto it = std::find_if(bg_by_prio.begin() + skip, bg_by_prio.end(), [&](int bg) {
-				++skip;
-				if (bg_render[bg][dot].transparent) {
+		auto GetNextTopmostOpaqueBgLayer = [&](uint dot) -> int {
+			auto it = std::find_if(bg_by_prio.begin() + bg_skip, bg_by_prio.end(), [&](int bg) {
+				++bg_skip;
+				if (!(dispcnt.screen_display_bg & 1 << bg) || bg_render[bg][dot].transparent) {
 					return false;
 				}
 				if (win0_active) {
@@ -59,6 +60,7 @@ namespace PPU
 		};
 
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
+			bg_skip = 0;
 			if (scanline_falls_on_win0) {
 				win0_active = dot >= winh_x1[0] && dot < winh_x2[0];
 			}
@@ -337,10 +339,13 @@ namespace PPU
 			IRQ::Raise(IRQ::Source::HBlank);
 		}
 	}
-
+	
 
 	void OnNewScanline()
 	{
+		if (v_counter < lines_until_vblank) {
+			RenderScanline();
+		}
 		Scheduler::AddEvent(Scheduler::EventType::HBlank, cycles_until_hblank, OnHBlank);
 		dispstat.hblank = in_hblank = false;
 		++v_counter;
@@ -358,11 +363,12 @@ namespace PPU
 			UpdateRotateScalingRegisters();
 		}
 		else if (v_counter == lines_until_vblank) {
+			framebuffer_index = 0;
+			Video::NotifyNewGameFrameReady();
 			dispstat.vblank = in_vblank = true;
 			if (dispstat.vblank_irq_enable) {
 				IRQ::Raise(IRQ::Source::VBlank);
 			}
-			Render();
 			DMA::OnVBlank();
 		}
 		else if (v_counter == total_num_lines - 1) {
@@ -515,14 +521,6 @@ namespace PPU
 	}
 
 
-	void Render()
-	{
-		framebuffer_index = 0;
-		Scanline();
-		Video::NotifyNewGameFrameReady();
-	}
-
-
 	template<void(*RenderFun)(), bool vertical_mosaic>
 	void RenderBackground(uint bg)
 	{
@@ -606,15 +604,7 @@ namespace PPU
 	}
 
 
-	void RenderTransparentBackground(uint bg)
-	{
-		for (uint dot = 0; dot < dots_per_line; ++dot) {
-			bg_render[bg][dot] = transparent_bg_pixel;
-		}
-	}
-
-
-	void Scanline()
+	void RenderScanline()
 	{
 		if (dispcnt.forced_blank) {
 			/* output only white pixels */
@@ -648,6 +638,14 @@ namespace PPU
 		}
 
 		BlendLayers();
+	}
+
+
+	void RenderTransparentBackground(uint bg)
+	{
+		for (uint dot = 0; dot < dots_per_line; ++dot) {
+			bg_render[bg][dot] = transparent_bg_pixel;
+		}
 	}
 
 
@@ -907,6 +905,7 @@ namespace PPU
 
 	void SortBackgroundsAfterPriority()
 	{
+		/* TODO: also take into account if a bg is enabled? */
 		for (int i = 0; i < 4; ++i) {
 			for (int j = 0; j < 3; ++j) {
 				if (bgcnt[bg_by_prio[j]].bg_priority > bgcnt[bg_by_prio[j + 1]].bg_priority ||
