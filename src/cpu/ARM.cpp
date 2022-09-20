@@ -477,7 +477,6 @@ namespace CPU
 	u32 GetSecondOperand(u32 opcode, bool set_conds)
 	{
 		auto rm = opcode & 0xF;
-		auto shift_type = opcode >> 5 & 3;
 		auto shift_amount = [&] {
 			if (opcode & 0x10) { /* shift register */
 				auto rs = opcode >> 8 & 0xF;
@@ -487,7 +486,12 @@ namespace CPU
 				return opcode >> 7 & 0x1F;
 			}
 		}();
-
+		/* When the shift amount comes from a register and is 0, no shifting is done, and carry is unchanged.
+		   This is different from when the shift amount comes from an immediate (see below). */
+		if (shift_amount == 0 && (opcode & 0x10)) {
+			return r[rm];
+		}
+		auto shift_type = opcode >> 5 & 3;
 		switch (shift_type) {
 		case 0b00: /* logical left */
 			if (shift_amount == 0) {

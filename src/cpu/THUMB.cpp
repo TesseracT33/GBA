@@ -280,10 +280,6 @@ namespace CPU
 		auto op1 = r[rd];
 		auto op2 = r[rs];
 
-		if (!(op2 & 0xFF)) {
-			int a = 3;
-		}
-
 		/* Affected Flags:
 			N,Z,C,V for  ADC,SBC,NEG,CMP,CMN
 			N,Z,C   for  LSL,LSR,ASR,ROR (carry flag unchanged if zero shift amount)
@@ -302,7 +298,6 @@ namespace CPU
 				return op1 & op2;
 			}
 			if constexpr (instr == ASR) {
-				/* The behavior for when shift_amount == 0 is different than ARM */
 				auto shift_amount = op2 & 0xFF;
 				if (shift_amount == 0) {
 					return op1;
