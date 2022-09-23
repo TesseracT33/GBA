@@ -9,8 +9,7 @@ namespace IRQ
 	{
 		irq = IE & IF & 0x3FF;
 		if (ime) {
-			static constexpr int irq_set_cycle_delay = 3;
-			Scheduler::AddEvent(Scheduler::EventType::IrqChange, irq_set_cycle_delay, [] { CPU::SetIRQ(irq); });
+			Scheduler::AddEvent(Scheduler::EventType::IrqChange, irq_event_cycle_delay, [] { CPU::SetIRQ(irq); });
 		}
 	}
 
@@ -100,7 +99,7 @@ namespace IRQ
 		bool prev_ime = ime;
 		ime = data & 1;
 		if (ime ^ prev_ime) {
-			CPU::SetIRQ(ime ? irq : false);
+			Scheduler::AddEvent(Scheduler::EventType::IrqChange, irq_event_cycle_delay, [] { CPU::SetIRQ(ime ? irq : false); });
 		}
 	}
 }

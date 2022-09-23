@@ -42,6 +42,8 @@ namespace IRQ
 
 	void CheckIrq();
 
+	constexpr int irq_event_cycle_delay = 3;
+
 	bool ime;
 	bool irq;
 	u16 IE;
