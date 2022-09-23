@@ -30,7 +30,6 @@ namespace Bios
 			UserMessage::Show("Could not load custom BIOS. Reverting to the default BIOS.",
 				UserMessage::Type::Warning);
 			SetDefault();
-			SetDefault();
 			return false;
 		}
 	}
