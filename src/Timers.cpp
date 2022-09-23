@@ -9,7 +9,7 @@ namespace Timers
 	{
 		std::ranges::for_each(timer, [](Timer& t) {
 			std::memset(&t, 0, sizeof(Timer));
-			t.counter_max_exclusive = std::numeric_limits<u16>::max() + 1;
+			t.counter_max_exclusive = 0x10000;
 		});
 		for (int i = 1; i < 4; ++i) {
 			timer[i].prev_timer = &timer[i - 1];
@@ -165,6 +165,13 @@ namespace Timers
 	}
 
 
+	u16 Timer::GetRealCounter()
+	{
+		static constexpr std::array prescaler_shift = { 0, 6, 8, 10 };
+		return (reload + (counter >> prescaler_shift[control.prescaler])) & 0xFFFF;
+	}
+
+
 	void Timer::OnDisable()
 	{
 		Timer* t = this;
@@ -177,12 +184,13 @@ namespace Timers
 	}
 
 
-	void Timer::OnWriteControlTimerEnabled()
+	void Timer::OnWriteControlTimerEnabled(u16 real_counter)
 	{
 		const u64 global_time = Scheduler::GetGlobalTime();
-		counter_max_exclusive = std::numeric_limits<u16>::max() + 1 - reload;
+		counter_max_exclusive = 0x10000 - reload;
 		if (control.count_up && prev_timer != nullptr) { /* TODO: for timer 0, use prescaler even if count_up is set? */
 			period = counter_max_exclusive * prev_timer->period;
+			counter = real_counter;
 			if (prev_timer->is_counting) {
 				Timer* t = prev_timer;
 				while (t->control.count_up && t->prev_timer != nullptr) {
@@ -198,8 +206,9 @@ namespace Timers
 			}
 		}
 		else {
-			counter_max_exclusive *= prescaler_to_period[control.prescaler]; /* TODO: could make it so that counter > max */
+			counter_max_exclusive *= prescaler_to_period[control.prescaler];
 			period = counter_max_exclusive;
+			counter = real_counter * prescaler_to_period[control.prescaler] + (global_time & (prescaler_to_period[control.prescaler] - 1));
 			time_until_overflow = counter_max_exclusive - counter;
 			time_last_counter_refresh = global_time;
 			if (control.irq_enable) {
@@ -215,8 +224,7 @@ namespace Timers
 		if (is_counting) {
 			UpdateCounter();
 		}
-		static constexpr std::array prescaler_shift = { 0, 6, 8, 10 };
-		return (reload + (counter >> prescaler_shift[control.prescaler])) & 0xFFFF;
+		return GetRealCounter();
 	}
 
 
@@ -239,7 +247,7 @@ namespace Timers
 	void Timer::UpdatePeriod()
 	{
 		/* TODO: do we need to update period if we're disabled? */
-		counter_max_exclusive = std::numeric_limits<u16>::max() + 1 - reload;
+		counter_max_exclusive = 0x10000 - reload;
 		if (!control.count_up) { /* TODO: for timer 0, use prescaler even if count_up is set? */
 			counter_max_exclusive *= prescaler_to_period[control.prescaler];
 			period = counter_max_exclusive;
@@ -292,11 +300,13 @@ namespace Timers
 	void Timer::WriteControl(u8 data)
 	{
 		bool prev_enable = control.enable;
-		control = std::bit_cast<Control>(data);
 		if (control.enable) {
-			OnWriteControlTimerEnabled();
+			u16 real_counter = GetRealCounter();
+			control = std::bit_cast<Control>(data);
+			OnWriteControlTimerEnabled(real_counter);
 		}
 		else if (prev_enable) {
+			control = std::bit_cast<Control>(data);
 			OnDisable();
 		}
 	}

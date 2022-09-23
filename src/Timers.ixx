@@ -9,7 +9,6 @@ import <array>;
 import <concepts>;
 import <cassert>;
 import <cstring>;
-import <limits>;
 
 namespace Timers
 {
@@ -27,9 +26,11 @@ namespace Timers
 
 	struct Timer
 	{
+		struct Control;
 		void AddToCounter(u64 value);
+		u16 GetRealCounter();
 		void OnDisable();
-		void OnWriteControlTimerEnabled();
+		void OnWriteControlTimerEnabled(u16 real_counter);
 		u16 ReadCounter();
 		void UpdateCounter();
 		void UpdatePeriod();
