@@ -289,9 +289,12 @@ namespace CPU
 		bool reg_or_imm = opcode >> 25 & 1; /* 0 = register; 1 = immediate */
 
 		u32 op1 = r[rn];
+		if (rn == 15 && reg_or_imm == 0) {
+			op1 += 4;
+		}
 		u32 op2 = [&] {
 			if (reg_or_imm == 0) { /* register */
-				return GetSecondOperand(opcode, set_conds);
+				return Shift(opcode, set_conds);
 			}
 			else { /* immediate */
 				auto imm = opcode & 0xFF;
@@ -308,8 +311,6 @@ namespace CPU
 			}
 		}();
 
-		/* TODO: right now, the carry can be modified through a call to the "GetSecondOperand" function,
-			even if the "set condition codes" flag is clear. Is this correct? */
 		u32 result = [&] {
 			if constexpr (instr == ADC)                 return op1 + op2 + cpsr.carry;
 			if constexpr (instr == ADD || instr == CMN) return op1 + op2;
@@ -469,100 +470,6 @@ namespace CPU
 			default:
 				std::unreachable();
 			}
-		}
-	}
-
-
-	/* TODO: possibly make this return carry instead of directly setting it */
-	u32 GetSecondOperand(u32 opcode, bool set_conds)
-	{
-		auto rm = opcode & 0xF;
-		auto shift_amount = [&] {
-			if (opcode & 0x10) { /* shift register */
-				auto rs = opcode >> 8 & 0xF;
-				return r[rs] & 0xFF;
-			}
-			else { /* shift immediate */
-				return opcode >> 7 & 0x1F;
-			}
-		}();
-		/* When the shift amount comes from a register and is 0, no shifting is done, and carry is unchanged.
-		   This is different from when the shift amount comes from an immediate (see below). */
-		if (shift_amount == 0 && (opcode & 0x10)) {
-			return r[rm];
-		}
-		auto shift_type = opcode >> 5 & 3;
-		switch (shift_type) {
-		case 0b00: /* logical left */
-			if (shift_amount == 0) {
-				/* LSL#0: No shift performed. The C flag is NOT affected. */
-				return r[rm];
-			}
-			else if (shift_amount < 32) {
-				if (set_conds) {
-					cpsr.carry = GetBit(r[rm], 32 - shift_amount);
-				}
-				return r[rm] << shift_amount;
-			}
-			else {
-				if (set_conds) {
-					cpsr.carry = shift_amount == 32 ? GetBit(r[rm], 0) : 0;
-				}
-				return 0;
-			}
-
-		case 0b01: /* logical right */
-			if (shift_amount > 0 && shift_amount < 32) {
-				if (set_conds) {
-					cpsr.carry = GetBit(r[rm], shift_amount - 1);
-				}
-				return u32(r[rm]) >> shift_amount;
-			}
-			else {
-				/* LSR#0: Interpreted as LSR#32, ie. result becomes zero, C becomes Bit 31 of the input */
-				if (set_conds) {
-					cpsr.carry = shift_amount > 32 ? 0 : GetBit(r[rm], 31);
-				}
-				return 0;
-			}
-
-		case 0b10: /* arithmetic right */
-			if (shift_amount > 0 && shift_amount < 32) {
-				if (set_conds) {
-					cpsr.carry = GetBit(r[rm], shift_amount - 1);
-				}
-				return s32(r[rm]) >> shift_amount;
-			}
-			else { 
-				/* ASR#0: Interpreted as ASR#32, ie. the result and C are filled by Bit 31 of the input. */
-				bool bit31 = GetBit(r[rm], 31);
-				if (set_conds) {
-					cpsr.carry = bit31;
-				}
-				return bit31 ? 0xFFFF'FFFF : 0;
-			}
-
-		case 0b11: /* rotate right */
-			if (shift_amount == 0) {
-				/* ROR#0: Interpreted as RRX#1 (RCR), like ROR#1, but Op2 Bit 31 set to old C. */
-				if (set_conds) {
-					auto prev_carry = cpsr.carry;
-					cpsr.carry = r[rm] & 1;
-					return u32(r[rm]) >> 1 | prev_carry << 31;
-				}
-				else {
-					return u32(r[rm]) >> 1 | cpsr.carry << 31;
-				}
-			}
-			else {
-				if (set_conds) {
-					cpsr.carry = r[rm] >> ((shift_amount - 1) & 0x1F) & 1;
-				}
-				return std::rotr(r[rm], shift_amount);
-			}
-
-		default:
-			std::unreachable();
 		}
 	}
 
@@ -833,7 +740,7 @@ namespace CPU
 		bool p = opcode >> 24 & 1; /* 0 = add offset after transfer; 1 = add offset before transfer */
 		bool reg_or_imm = opcode >> 25 & 1; /* 0 = offset is an immediate value; 1 = offset is a register */
 		s32 offset = [&] {
-			auto offset = reg_or_imm ? GetSecondOperand(opcode) : opcode & 0xFFF;
+			auto offset = reg_or_imm ? Shift(opcode) : opcode & 0xFFF;
 			return up_or_down ? s32(offset) : -s32(offset);
 		}();
 		auto addr = r[rn] + p * offset;
@@ -856,6 +763,101 @@ namespace CPU
 			/* Write-back must not be specified if R15 is specified as the base register (Rn). */
 			addr += !p * offset;
 			r[rn] = addr;
+		}
+	}
+
+
+	/* TODO: possibly make this return carry instead of directly setting it */
+	u32 Shift(u32 opcode, bool set_conds)
+	{
+		auto rm = opcode & 0xF;
+		auto shift_amount = [&] {
+			if (opcode & 0x10) { /* shift register */
+				auto rs = opcode >> 8 & 0xF;
+				return (r[rs] + (rs == 15 ? 4 : 0)) & 0xFF;
+			}
+			else { /* shift immediate */
+				return opcode >> 7 & 0x1F;
+			}
+		}();
+		auto oper = r[rm];
+		/* When the shift amount comes from a register and is 0, no shifting is done, and carry is unchanged.
+		   This is different from when the shift amount comes from an immediate (see below). */
+		if (shift_amount == 0 && (opcode & 0x10)) {
+			return oper + (rm == 15 ? 4 : 0);
+		}
+		auto shift_type = opcode >> 5 & 3;
+		switch (shift_type) {
+		case 0b00: /* logical left */
+			if (shift_amount == 0) {
+				/* LSL#0: No shift performed. The C flag is NOT affected. */
+				return oper;
+			}
+			else if (shift_amount < 32) {
+				if (set_conds) {
+					cpsr.carry = GetBit(oper, 32 - shift_amount);
+				}
+				return oper << shift_amount;
+			}
+			else {
+				if (set_conds) {
+					cpsr.carry = shift_amount == 32 ? GetBit(oper, 0) : 0;
+				}
+				return 0;
+			}
+
+		case 0b01: /* logical right */
+			if (shift_amount > 0 && shift_amount < 32) {
+				if (set_conds) {
+					cpsr.carry = GetBit(oper, shift_amount - 1);
+				}
+				return u32(oper) >> shift_amount;
+			}
+			else {
+				/* LSR#0: Interpreted as LSR#32, ie. result becomes zero, C becomes Bit 31 of the input */
+				if (set_conds) {
+					cpsr.carry = shift_amount > 32 ? 0 : GetBit(oper, 31);
+				}
+				return 0;
+			}
+
+		case 0b10: /* arithmetic right */
+			if (shift_amount > 0 && shift_amount < 32) {
+				if (set_conds) {
+					cpsr.carry = GetBit(oper, shift_amount - 1);
+				}
+				return s32(oper) >> shift_amount;
+			}
+			else {
+				/* ASR#0: Interpreted as ASR#32, ie. the result and C are filled by Bit 31 of the input. */
+				bool bit31 = GetBit(oper, 31);
+				if (set_conds) {
+					cpsr.carry = bit31;
+				}
+				return bit31 ? 0xFFFF'FFFF : 0;
+			}
+
+		case 0b11: /* rotate right */
+			if (shift_amount == 0) {
+				/* ROR#0: Interpreted as RRX#1 (RCR), like ROR#1, but Op2 Bit 31 set to old C. */
+				if (set_conds) {
+					auto prev_carry = cpsr.carry;
+					cpsr.carry = oper & 1;
+					return u32(oper) >> 1 | prev_carry << 31;
+				}
+				else {
+					return u32(oper) >> 1 | cpsr.carry << 31;
+				}
+			}
+			else {
+				if (set_conds) {
+					cpsr.carry = oper >> ((shift_amount - 1) & 0x1F) & 1;
+				}
+				return std::rotr(oper, shift_amount);
+			}
+
+		default:
+			std::unreachable();
 		}
 	}
 }
