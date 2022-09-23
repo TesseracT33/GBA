@@ -13,7 +13,7 @@ namespace Scheduler
 		using DriverSuspendFunc = void(*)();
 		using EventCallback = void(*)();
 
-		enum class Driver {
+		enum class DriverType {
 			/* ordered by priority */
 			Dma0,
 			Dma1,
@@ -30,38 +30,37 @@ namespace Scheduler
 			TimerOverflow0,
 			TimerOverflow1,
 			TimerOverflow2,
-			TimerOverflow3,
+			TimerOverflow3
 		};
 
-		void AddEvent(EventType event_type, u64 time_until_fire, EventCallback callback);
-		void ChangeEventTime(EventType event_type, u64 new_time_to_fire);
-		void DisengageDriver(Driver driver);
-		void EngageDriver(Driver driver, DriverRunFunc run_func, DriverSuspendFunc suspend_func);
+		void AddEvent(EventType type, u64 time_until_fire, EventCallback callback);
+		void ChangeEventTime(EventType type, u64 new_time_to_fire);
+		void DisengageDriver(DriverType type);
+		void EngageDriver(DriverType type, DriverRunFunc run_func, DriverSuspendFunc suspend_func);
 		u64 GetGlobalTime();
 		void Initialize();
-		void RemoveEvent(EventType event_type);
+		void RemoveEvent(EventType type);
 		void Run();
 	}
 
-	uint GetDriverPriority(Driver driver);
+	uint GetDriverPriority(DriverType type);
 
-	struct Driving
+	struct alignas(32) Driver
 	{
-		Driver driver;
+		DriverType type;
 		DriverRunFunc run_function;
 		DriverSuspendFunc suspend_function;
 	};
 
-	struct Event
+	struct alignas(32) Event
 	{
 		EventCallback callback;
 		u64 time;
-		EventType event_type;
+		EventType type;
 	};
 
 	u64 global_time;
 
-	/* TODO: write custom allocators */
-	std::list<Driving> drivers; /* orderer by priority */
+	std::list<Driver> drivers; /* orderer by priority */
 	std::list<Event> events; /* ordered by timestamp */
 }

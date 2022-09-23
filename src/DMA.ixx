@@ -59,7 +59,7 @@ namespace DMA
 			u16 enable : 1;
 		} control;
 		IRQ::Source irq_source;
-		Scheduler::Driver driver;
+		Scheduler::DriverType driver_type;
 		Scheduler::DriverRunFunc perform_dma_func;
 		Scheduler::DriverSuspendFunc suspend_dma_func;
 	};

@@ -7,40 +7,40 @@ import PPU;
 
 namespace Scheduler
 {
-	void AddEvent(EventType event_type, u64 time_until_fire, EventCallback callback)
+	void AddEvent(EventType type, u64 time_until_fire, EventCallback callback)
 	{
 		global_time += CPU::GetElapsedCycles();
 		u64 event_absolute_time = global_time + time_until_fire;
 		for (auto it = events.begin(); it != events.end(); ++it) {
 			if (event_absolute_time < it->time) {
-				events.emplace(it, callback, event_absolute_time, event_type);
+				events.emplace(it, callback, event_absolute_time, type);
 				if (it == events.begin()) {
 					drivers.front().suspend_function();
 				}
 				return;
 			}
 		}
-		events.emplace_back(callback, event_absolute_time, event_type);
+		events.emplace_back(callback, event_absolute_time, type);
 	}
 
 
-	void ChangeEventTime(EventType event_type, u64 new_time_to_fire)
+	void ChangeEventTime(EventType type, u64 new_time_to_fire)
 	{
 		for (auto it = events.begin(); it != events.end(); ++it) {
-			if (it->event_type == event_type) {
+			if (it->type == type) {
 				EventCallback callback = it->callback;
 				events.erase(it);
-				AddEvent(event_type, new_time_to_fire, callback);
+				AddEvent(type, new_time_to_fire, callback);
 				break;
 			}
 		}
 	}
 
 
-	void DisengageDriver(Driver driver)
+	void DisengageDriver(DriverType type)
 	{
 		for (auto it = drivers.begin(); it != drivers.end(); ++it) {
-			if (it->driver == driver) {
+			if (it->type == type) {
 				drivers.erase(it);
 				break;
 			}
@@ -48,24 +48,24 @@ namespace Scheduler
 	}
 
 
-	void EngageDriver(Driver driver, DriverRunFunc run_func, DriverSuspendFunc suspend_func)
+	void EngageDriver(DriverType type, DriverRunFunc run_func, DriverSuspendFunc suspend_func)
 	{
 		for (auto it = drivers.begin(); it != drivers.end(); ++it) {
-			if (GetDriverPriority(it->driver) > GetDriverPriority(driver)) {
-				drivers.emplace(it, driver, run_func, suspend_func);
+			if (GetDriverPriority(it->type) > GetDriverPriority(type)) {
+				drivers.emplace(it, type, run_func, suspend_func);
 				if (it == drivers.begin()) {
 					(++it)->suspend_function();
 				}
 				return;
 			}
 		}
-		drivers.emplace_back(driver, run_func, suspend_func);
+		drivers.emplace_back(type, run_func, suspend_func);
 	}
 
 
-	uint GetDriverPriority(Driver driver)
+	uint GetDriverPriority(DriverType type)
 	{
-		return std::to_underlying(driver);
+		return std::to_underlying(type);
 	}
 
 
@@ -82,14 +82,14 @@ namespace Scheduler
 		drivers.clear();
 		events.clear();
 		PPU::AddInitialEvents();
-		EngageDriver(Driver::Cpu, CPU::Run, CPU::SuspendRun);
+		EngageDriver(DriverType::Cpu, CPU::Run, CPU::SuspendRun);
 	}
 
 
-	void RemoveEvent(EventType event_type)
+	void RemoveEvent(EventType type)
 	{
 		for (auto it = events.begin(); it != events.end(); ) {
-			if (it->event_type == event_type) {
+			if (it->type == type) {
 				if (it == events.begin()) {
 					drivers.front().suspend_function();
 				}

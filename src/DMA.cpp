@@ -12,10 +12,10 @@ namespace DMA
 			std::memset(&dma_ch[i], 0, sizeof(DmaChannel));
 			dma_ch[i].index = i;
 		}
-		dma_ch[0].driver = Scheduler::Driver::Dma0;
-		dma_ch[1].driver = Scheduler::Driver::Dma1;
-		dma_ch[2].driver = Scheduler::Driver::Dma2;
-		dma_ch[3].driver = Scheduler::Driver::Dma3;
+		dma_ch[0].driver_type = Scheduler::DriverType::Dma0;
+		dma_ch[1].driver_type = Scheduler::DriverType::Dma1;
+		dma_ch[2].driver_type = Scheduler::DriverType::Dma2;
+		dma_ch[3].driver_type = Scheduler::DriverType::Dma3;
 		dma_ch[0].perform_dma_func = PerformDma<0>;
 		dma_ch[1].perform_dma_func = PerformDma<1>;
 		dma_ch[2].perform_dma_func = PerformDma<2>;
@@ -323,13 +323,13 @@ namespace DMA
 
 	void DmaChannel::NotifyDmaActive() const
 	{
-		Scheduler::EngageDriver(driver, perform_dma_func, suspend_dma_func);
+		Scheduler::EngageDriver(driver_type, perform_dma_func, suspend_dma_func);
 	}
 
 
 	void DmaChannel::NotifyDmaInactive() const
 	{
-		Scheduler::DisengageDriver(driver);
+		Scheduler::DisengageDriver(driver_type);
 	}
 
 
