@@ -2,6 +2,7 @@ export module Cartridge;
 
 import Util;
 
+import <algorithm>;
 import <bit>;
 import <cassert>;
 import <concepts>;
@@ -20,6 +21,9 @@ namespace Cartridge
 		void WriteSram(u32 addr, u8 data);
 	}
 
+	void ResizeRomToPowerOfTwo(std::vector<u8>& rom);
+
+	u32 rom_size_mask;
 	u32 sram_size_mask;
 
 	std::vector<u8> rom;

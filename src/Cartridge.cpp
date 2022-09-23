@@ -14,6 +14,8 @@ namespace Cartridge
 		auto optional_vec = ReadFileIntoVector(path);
 		if (optional_vec) {
 			rom = optional_vec.value();
+			ResizeRomToPowerOfTwo(rom);
+			rom_size_mask = uint(rom.size() - 1);
 			return true;
 		}
 		else {
@@ -32,10 +34,22 @@ namespace Cartridge
 	template<std::integral Int>
 	Int ReadRom(u32 addr)
 	{
-		u32 offset = (addr & 0x1FF'FFFF) % rom.size(); /* TODO: expensive, but some test roms have size not power of two */
+		u32 offset = addr & 0x1FF'FFFF & rom_size_mask;
 		Int ret;
 		std::memcpy(&ret, rom.data() + offset, sizeof(Int));
 		return ret;
+	}
+
+
+	void ResizeRomToPowerOfTwo(std::vector<u8>& rom)
+	{
+		size_t actual_size = rom.size();
+		size_t pow_two_size = std::bit_ceil(actual_size);
+		size_t diff = pow_two_size - actual_size;
+		if (diff > 0) {
+			rom.resize(pow_two_size);
+			std::copy(rom.begin(), rom.begin() + diff, rom.begin() + actual_size);
+		}
 	}
 
 
