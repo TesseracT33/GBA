@@ -3,6 +3,7 @@ module Bus;
 import APU;
 import Bios;
 import Cartridge;
+import CPU;
 import Debug;
 import DMA;
 import Keypad;
@@ -14,7 +15,7 @@ namespace Bus
 {
 	void Initialize()
 	{
-		waitcnt = 0;
+		std::memset(&waitcnt, 0, sizeof(waitcnt));
 		board_wram.fill(0);
 		chip_wram.fill(0);
 	}
@@ -133,84 +134,117 @@ namespace Bus
 	}
 
 
-	template<std::integral Int>
+	template<std::integral Int, Scheduler::DriverType driver>
 	Int Read(u32 addr)
 	{
 		static_assert(sizeof(Int) == 1 || sizeof(Int) == 2 || sizeof(Int) == 4);
 
-		if constexpr (sizeof(Int) == 2) {
-			addr &= ~1; /* TODO: correct? */
-		}
-		if constexpr (sizeof(Int) == 4) {
-			addr &= ~3;
-		}
+		bool sequential_access = addr == next_addr_for_sequential_access;
+		next_addr_for_sequential_access = addr + sizeof(Int);
 
+		Int val;
+		uint cycles;
 		if (addr & 0xF000'0000) { /* 1000'0000-FFFF'FFFF   Not used (upper 4bits of address bus unused) */
-			return ReadOpenBus<Int>(addr);
+			val = ReadOpenBus<Int>(addr);
+			cycles = 1;
 		}
-
-		switch (addr >> 24 & 0xF) {
-		case 0x0: /* 0000'0000-0000'3FFF   BIOS - System ROM */
-			if (addr <= 0x3FFF) {
-				return Bios::Read<Int>(addr);
-			}
-			else {
-				return ReadOpenBus<Int>(addr);
-			}
-
-		case 0x1: /* not used */
-			return ReadOpenBus<Int>(addr);
-
-		case 0x2: { /* 0200'0000-0203'FFFF   WRAM - On-board Work RAM */
-			Int ret;
-			std::memcpy(&ret, board_wram.data() + (addr & 0x3FFFF), sizeof(Int));
-			return ret;
-		}
-
-		case 0x3: { /* 0300'0000-0300'7FFF   WRAM - On-chip Work RAM */
-			Int ret;
-			std::memcpy(&ret, chip_wram.data() + (addr & 0x7FFF), sizeof(Int));
-			return ret;
-		}
-
-		case 0x4: /* 0400'0000-0400'03FE   I/O Registers */
-			return ReadIo<Int>(addr);
-
-		case 0x5: /* 0500'0000-0500'03FF   BG/OBJ Palette RAM */
-			return PPU::ReadPaletteRam<Int>(addr);
-
-		case 0x6: /* 0600'0000-0601'7FFF   VRAM - Video RAM */
-			return PPU::ReadVram<Int>(addr);
-
-		case 0x7: /* 0700'0000-0700'03FF   OAM - OBJ Attributes */
-			return PPU::ReadOam<Int>(addr);
-
-		case 0x8: /* 0800'0000-09FF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 0 */
-		case 0x9:
-		case 0xA: /* 0A00'0000-0BFF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 1 */
-		case 0xB:
-		case 0xC: /* 0C00'0000-0DFF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 2 */
-		case 0xD: {
-			u32 wait_state = addr >> 25 & 3; /* TODO */
-			return Cartridge::ReadRom<Int>(addr);
-		}
-
-		case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
-			if constexpr (sizeof(Int) == 1) {
-				return addr <= 0x0E00'FFFF
-					? Cartridge::ReadSram(addr)
+		else {
+			switch (addr >> 24 & 0xF) {
+			case 0x0: /* 0000'0000-0000'3FFF   BIOS - System ROM */
+				val = addr <= 0x3FFF
+					? Bios::Read<Int>(addr)
 					: ReadOpenBus<Int>(addr);
-			}
-			else {
-				return ReadOpenBus<Int>(addr); /* TODO: what should happen? */
-			}
+				cycles = 1;
+				break;
 
-		case 0xF:
-			return ReadOpenBus<Int>(addr);
+			case 0x1: /* not used */
+				val = ReadOpenBus<Int>(addr);
+				cycles = 1;
+				break;
 
-		default:
-			std::unreachable();
+			case 0x2: /* 0200'0000-0203'FFFF   WRAM - On-board Work RAM */
+				std::memcpy(&val, board_wram.data() + (addr & 0x3FFFF), sizeof(Int));
+				if constexpr (sizeof(Int) == 4) cycles = 6;
+				else                            cycles = 3;
+				break;
+
+			case 0x3: /* 0300'0000-0300'7FFF   WRAM - On-chip Work RAM */
+				std::memcpy(&val, chip_wram.data() + (addr & 0x7FFF), sizeof(Int));
+				cycles = 1;
+				break;
+
+			case 0x4: /* 0400'0000-0400'03FE   I/O Registers */
+				val = ReadIo<Int>(addr);
+				cycles = 1;
+				break;
+
+			case 0x5: /* 0500'0000-0500'03FF   BG/OBJ Palette RAM */
+				val = PPU::ReadPaletteRam<Int>(addr);
+				if constexpr (sizeof(Int) == 4) cycles = 2;
+				else                            cycles = 1;
+				break;
+
+			case 0x6: /* 0600'0000-0601'7FFF   VRAM - Video RAM */
+				val = PPU::ReadVram<Int>(addr);
+				if constexpr (sizeof(Int) == 4) cycles = 2;
+				else                            cycles = 1;
+				break;
+
+			case 0x7: /* 0700'0000-0700'03FF   OAM - OBJ Attributes */
+				val = PPU::ReadOam<Int>(addr);
+				cycles = 1;
+				break;
+
+			case 0x8: /* 0800'0000-09FF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 0 */
+			case 0x9:
+			case 0xA: /* 0A00'0000-0BFF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 1 */
+			case 0xB:
+			case 0xC: /* 0C00'0000-0DFF'FFFF   Game Pak ROM/FlashROM (max 32MB) - Wait State 2 */
+			case 0xD: {
+				val = Cartridge::ReadRom<Int>(addr);
+				sequential_access &= (addr & 0x1FFFF) != 0; /* The GBA forcefully uses non-sequential timing at the beginning of each 128K-block of gamepak ROM */
+				auto wait_state = addr >> 25 & 3;
+				cycles = waitcnt.cart_wait[wait_state][sequential_access];
+				/* GamePak uses 16bit data bus, so that a 32bit access is split into TWO 16bit accesses (of which, the second fragment is always sequential, even if the first fragment was non-sequential). */
+				if constexpr (sizeof(Int) == 4) {
+					cycles += waitcnt.cart_wait[wait_state][1];
+				}
+			} break;
+
+			case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
+				if constexpr (sizeof(Int) == 1) {
+					if (addr <= 0x0E00'FFFF) {
+						val = Cartridge::ReadSram(addr);
+						cycles = waitcnt.sram_wait;
+					}
+					else {
+						val = ReadOpenBus<Int>(addr);
+						cycles = 1;
+					}
+				}
+				else {
+					val = ReadOpenBus<Int>(addr); /* TODO: what should happen? */
+					cycles = 1;
+				}
+				break;
+
+			case 0xF:
+				val = ReadOpenBus<Int>(addr);
+				cycles = 1;
+				break;
+
+			default:
+				std::unreachable();
+			}
 		}
+
+		if constexpr (driver == Scheduler::DriverType::Cpu)  CPU::AddCycles(cycles);
+		if constexpr (driver == Scheduler::DriverType::Dma0) DMA::AddCycles(cycles, 0);
+		if constexpr (driver == Scheduler::DriverType::Dma1) DMA::AddCycles(cycles, 1);
+		if constexpr (driver == Scheduler::DriverType::Dma2) DMA::AddCycles(cycles, 2);
+		if constexpr (driver == Scheduler::DriverType::Dma3) DMA::AddCycles(cycles, 3);
+
+		return val;
 	}
 
 
@@ -250,8 +284,8 @@ namespace Bus
 					case ADDR_IF + 1:      return IRQ::ReadIF(1);
 					case ADDR_IME:         return u8(IRQ::ReadIME());
 					case ADDR_IME + 1:     u8(0);
-					case ADDR_WAITCNT:     return GetByte(waitcnt, 0);
-					case ADDR_WAITCNT + 1: return GetByte(waitcnt, 1);
+					case ADDR_WAITCNT:     return GetByte(waitcnt.raw, 0);
+					case ADDR_WAITCNT + 1: return GetByte(waitcnt.raw, 1);
 					default: return ReadOpenBus<u8>(addr);
 					}
 				};
@@ -260,7 +294,7 @@ namespace Bus
 					case ADDR_IE:      return IRQ::ReadIE();
 					case ADDR_IF:      return IRQ::ReadIF();
 					case ADDR_IME:     return IRQ::ReadIME();
-					case ADDR_WAITCNT: return waitcnt;
+					case ADDR_WAITCNT: return waitcnt.raw;
 					default: return ReadOpenBus<u16>(addr);
 					}
 				};
@@ -292,61 +326,91 @@ namespace Bus
 	}
 
 
-	template<std::integral Int>
+	template<std::integral Int, Scheduler::DriverType driver>
 	void Write(u32 addr, Int data)
 	{
 		static_assert(sizeof(Int) == 1 || sizeof(Int) == 2 || sizeof(Int) == 4);
-		
+
+		bool sequential_access = addr == next_addr_for_sequential_access;
+		next_addr_for_sequential_access = addr + sizeof(Int);
+
+		uint cycles;
 		if (addr & 0xF000'0000) { /* 1000'0000-FFFF'FFFF   Not used (upper 4bits of address bus unused) */
-			return;
+			cycles = 1;
 		}
-		if constexpr (sizeof(Int) == 2) {
-			addr &= ~1;
+		else {
+			switch (addr >> 24 & 0xF) {
+			case 0x2: /* 0200'0000-0203'FFFF   WRAM - On-board Work RAM */
+				std::memcpy(board_wram.data() + (addr & 0x3FFFF), &data, sizeof(Int));
+				if constexpr (sizeof(Int) == 4) cycles = 6;
+				else                            cycles = 3;
+				break;
+
+			case 0x3: /* 0300'0000-0300'7FFF   WRAM - On-chip Work RAM */
+				std::memcpy(chip_wram.data() + (addr & 0x7FFF), &data, sizeof(Int));
+				cycles = 1;
+				break;
+
+			case 0x4: /* 0400'0000-0400'03FE   I/O Registers */
+				WriteIo<Int>(addr, data);
+				cycles = 1;
+				break;
+
+			case 0x5: /* 0500'0000-0500'03FF   BG/OBJ Palette RAM */
+				if constexpr (sizeof(Int) == 1) {
+					cycles = 1;
+				}
+				if constexpr (sizeof(Int) == 2) {
+					PPU::WritePaletteRam<Int>(addr, data);
+					cycles = 1;
+				}
+				if constexpr (sizeof(Int) == 4) {
+					PPU::WritePaletteRam<Int>(addr, data);
+					cycles = 2;
+				}
+				break;
+
+			case 0x6: /* 0600'0000-0601'7FFF   VRAM - Video RAM */
+				if constexpr (sizeof(Int) == 1) {
+					cycles = 1;
+				}
+				if constexpr (sizeof(Int) == 2) {
+					PPU::WriteVram<Int>(addr, data);
+					cycles = 1;
+				}
+				if constexpr (sizeof(Int) == 4) {
+					PPU::WriteVram<Int>(addr, data);
+					cycles = 2;
+				}
+				break;
+
+			case 0x7: /* 0700'0000-0700'03FF   OAM - OBJ Attributes */
+				if (sizeof(Int) != 1) {
+					PPU::WriteOam<Int>(addr, data);
+				}
+				cycles = 1;
+				break;
+
+			case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
+				if constexpr (sizeof(Int) == 1) {
+					Cartridge::WriteSram(addr, data);
+					cycles = waitcnt.sram_wait;
+				}
+				else {
+					cycles = 1;
+				}
+				break;
+
+			default:
+				cycles = 1;
+			}
 		}
-		if constexpr (sizeof(Int) == 4) {
-			addr &= ~3;
-		}
 
-		switch (addr >> 24 & 0xF) {
-		case 0x2: /* 0200'0000-0203'FFFF   WRAM - On-board Work RAM */
-			std::memcpy(board_wram.data() + (addr & 0x3FFFF), &data, sizeof(Int));
-			break;
-
-		case 0x3: /* 0300'0000-0300'7FFF   WRAM - On-chip Work RAM */
-			std::memcpy(chip_wram.data() + (addr & 0x7FFF), &data, sizeof(Int));
-			break;
-
-		case 0x4: /* 0400'0000-0400'03FE   I/O Registers */
-			WriteIo<Int>(addr, data);
-			break;
-
-		case 0x5: /* 0500'0000-0500'03FF   BG/OBJ Palette RAM */
-			if (sizeof(Int) != 1) {
-				PPU::WritePaletteRam<Int>(addr, data);
-			}
-			break;
-
-		case 0x6: /* 0600'0000-0601'7FFF   VRAM - Video RAM */
-			if (sizeof(Int) != 1) {
-				PPU::WriteVram<Int>(addr, data);
-			}
-			break;
-
-		case 0x7: /* 0700'0000-0700'03FF   OAM - OBJ Attributes */
-			if (sizeof(Int) != 1) {
-				PPU::WriteOam<Int>(addr, data);
-			}
-			break;
-
-		case 0xE: /* 0E00'0000-0E00'FFFF   Game Pak SRAM    (max 64 KBytes) - 8bit Bus width */
-			if constexpr (sizeof(Int) == 1) {
-				Cartridge::WriteSram(addr, data);
-			}
-			break;
-
-		case 0xF:
-			break;
-		}
+		if constexpr (driver == Scheduler::DriverType::Cpu)  CPU::AddCycles(cycles);
+		if constexpr (driver == Scheduler::DriverType::Dma0) DMA::AddCycles(cycles, 0);
+		if constexpr (driver == Scheduler::DriverType::Dma1) DMA::AddCycles(cycles, 1);
+		if constexpr (driver == Scheduler::DriverType::Dma2) DMA::AddCycles(cycles, 2);
+		if constexpr (driver == Scheduler::DriverType::Dma3) DMA::AddCycles(cycles, 3);
 	}
 
 
@@ -383,8 +447,8 @@ namespace Bus
 				case ADDR_IF:          IRQ::WriteIF(data, 0); break;
 				case ADDR_IF + 1:      IRQ::WriteIF(data, 1); break;
 				case ADDR_IME:         IRQ::WriteIME(data); break;
-				case ADDR_WAITCNT:     SetByte(waitcnt, 0, data); break;
-				case ADDR_WAITCNT + 1: SetByte(waitcnt, 1, data); break;
+				case ADDR_WAITCNT:     WriteWaitcntLo(data); break;
+				case ADDR_WAITCNT + 1: WriteWaitcntHi(data); break;
 				}
 			};
 			auto WriteHalf = [](u32 addr, u16 data) {
@@ -392,7 +456,7 @@ namespace Bus
 				case ADDR_IE:      IRQ::WriteIE(data); break;
 				case ADDR_IF:      IRQ::WriteIF(data); break;
 				case ADDR_IME:     IRQ::WriteIME(data); break;
-				case ADDR_WAITCNT: waitcnt = data; break;
+				case ADDR_WAITCNT: WriteWaitcnt(data); break;
 				}
 			};
 			if constexpr (sizeof(Int) == 1) {
@@ -413,16 +477,60 @@ namespace Bus
 	}
 
 
-	template s8 Read<s8>(u32);
-	template u8 Read<u8>(u32);
-	template s16 Read<s16>(u32);
-	template u16 Read<u16>(u32);
-	template s32 Read<s32>(u32);
-	template u32 Read<u32>(u32);
-	template void Write<s8>(u32, s8);
-	template void Write<u8>(u32, u8);
-	template void Write<s16>(u32, s16);
-	template void Write<u16>(u32, u16);
-	template void Write<s32>(u32, s32);
-	template void Write<u32>(u32, u32);
+	void WriteWaitcnt(u16 data)
+	{
+		waitcnt.raw = waitcnt.raw & 0x8000 | data & 0x7FFF;
+		waitcnt.sram_wait = sram_wait[data & 3];
+		waitcnt.cart_wait[0][0] = cart_wait_1st_access   [data >> 2 & 3];
+		waitcnt.cart_wait[0][1] = cart_wait_2nd_access[0][data >> 4 & 1];
+		waitcnt.cart_wait[1][0] = cart_wait_1st_access   [data >> 5 & 3];
+		waitcnt.cart_wait[1][1] = cart_wait_2nd_access[1][data >> 7 & 1];
+		waitcnt.cart_wait[2][0] = cart_wait_1st_access   [data >> 8 & 3];
+		waitcnt.cart_wait[2][1] = cart_wait_2nd_access[2][data >> 10 & 1];
+		waitcnt.phi_terminal_output = data >> 11 & 3;
+		waitcnt.prefetch_buffer_enable = data & 0x4000;
+		waitcnt.game_pak_type_flag = data & 0x8000;
+	}
+
+
+	void WriteWaitcntLo(u8 data)
+	{
+		waitcnt.raw = waitcnt.raw & 0xFF00 | data;
+		waitcnt.sram_wait = sram_wait[data & 3];
+		waitcnt.cart_wait[0][0] = cart_wait_1st_access   [data >> 2 & 3];
+		waitcnt.cart_wait[0][1] = cart_wait_2nd_access[0][data >> 4 & 1];
+		waitcnt.cart_wait[1][0] = cart_wait_1st_access   [data >> 5 & 3];
+		waitcnt.cart_wait[1][1] = cart_wait_2nd_access[1][data >> 7 & 1];
+	}
+
+
+	void WriteWaitcntHi(u8 data)
+	{
+		waitcnt.raw = waitcnt.raw & 0x80FF | (data & 0x7F) << 8;
+		waitcnt.cart_wait[2][0] = cart_wait_1st_access   [data & 3];
+		waitcnt.cart_wait[2][1] = cart_wait_2nd_access[2][data >> 2 & 1];
+		waitcnt.phi_terminal_output = data >> 3 & 3;
+		waitcnt.prefetch_buffer_enable = data & 0x40;
+		waitcnt.game_pak_type_flag = data & 0x80;
+	}
+
+#define ENUM_READ_WRITE_TEMPL_SPEC(DRIVER)      \
+	template s8 Read<s8, DRIVER>(u32);          \
+	template u8 Read<u8, DRIVER>(u32);          \
+	template s16 Read<s16, DRIVER>(u32);        \
+	template u16 Read<u16, DRIVER>(u32);        \
+	template s32 Read<s32, DRIVER>(u32);        \
+	template u32 Read<u32, DRIVER>(u32);        \
+	template void Write<s8, DRIVER>(u32, s8);   \
+	template void Write<u8, DRIVER>(u32, u8);   \
+	template void Write<s16, DRIVER>(u32, s16); \
+	template void Write<u16, DRIVER>(u32, u16); \
+	template void Write<s32, DRIVER>(u32, s32); \
+	template void Write<u32, DRIVER>(u32, u32);
+
+	ENUM_READ_WRITE_TEMPL_SPEC(Scheduler::DriverType::Cpu);
+	ENUM_READ_WRITE_TEMPL_SPEC(Scheduler::DriverType::Dma0);
+	ENUM_READ_WRITE_TEMPL_SPEC(Scheduler::DriverType::Dma1);
+	ENUM_READ_WRITE_TEMPL_SPEC(Scheduler::DriverType::Dma2);
+	ENUM_READ_WRITE_TEMPL_SPEC(Scheduler::DriverType::Dma3);
 }

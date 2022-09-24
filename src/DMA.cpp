@@ -6,6 +6,12 @@ import Debug;
 
 namespace DMA
 {
+	void AddCycles(u64 cycles, uint ch)
+	{
+		dma_ch[ch].cycle += cycles;
+	}
+
+
 	void Initialize()
 	{
 		for (int i = 0; i < 4; ++i) {
@@ -60,7 +66,14 @@ namespace DMA
 	template<uint dma_index> 
 	u64 PerformDma(u64 max_cycles_to_run)
 	{
+		static_assert(dma_index <= 3);
 		DmaChannel& dma = dma_ch[dma_index];
+		static constexpr Scheduler::DriverType driver = [&] {
+			if constexpr (dma_index == 0) return Scheduler::DriverType::Dma0;
+			if constexpr (dma_index == 1) return Scheduler::DriverType::Dma1;
+			if constexpr (dma_index == 2) return Scheduler::DriverType::Dma2;
+			if constexpr (dma_index == 3) return Scheduler::DriverType::Dma3;
+		}();
 
 		if (dma.suspended) {
 			dma.suspended = false;
@@ -88,14 +101,13 @@ namespace DMA
 			dma.src_addr_incr = GetAddrIncr(dma.control.src_addr_ctrl);
 		}
 
-		u64 cycle = 0;
+		dma.cycle = 0;
 		auto DoDma = [&] <std::integral Int> {
-			while (dma.current_count > 0 && cycle < max_cycles_to_run) {
-				Bus::Write(dma.current_dst_addr, Bus::Read<Int>(dma.current_src_addr));
+			while (dma.current_count > 0 && dma.cycle < max_cycles_to_run) {
+				Bus::Write<Int, driver>(dma.current_dst_addr, Bus::Read<Int, driver>(dma.current_src_addr));
 				--dma.current_count;
 				dma.current_dst_addr += dma.dst_addr_incr;
 				dma.current_src_addr += dma.src_addr_incr;
-				cycle += 2; /* TODO: count cycles properly */
 			}
 		};
 		if (dma.control.transfer_type == 0) {
@@ -119,7 +131,7 @@ namespace DMA
 				dma.control.enable = false;
 			}
 		}
-		return cycle;
+		return dma.cycle;
 	}
 
 
@@ -239,7 +251,6 @@ namespace DMA
 			case Bus::ADDR_DMA3CNT_L + 1: SetByte(dma_ch[3].count, 1, data); break;
 			case Bus::ADDR_DMA3CNT_H:     dma_ch[3].WriteControlLo(data); break;
 			case Bus::ADDR_DMA3CNT_H + 1: dma_ch[3].WriteControlHi(data); break;
-			default: break;
 			}
 		};
 
@@ -269,7 +280,6 @@ namespace DMA
 			case Bus::ADDR_DMA3DAD + 2: dma_ch[3].dst_addr = dma_ch[3].dst_addr & 0xFFFF | data << 16; break;
 			case Bus::ADDR_DMA3CNT_L:   dma_ch[3].count = data; break;
 			case Bus::ADDR_DMA3CNT_H:   dma_ch[3].WriteControl(data); break;
-			default: break;
 			}
 		};
 
@@ -286,7 +296,6 @@ namespace DMA
 			default: {
 				WriteHalf(addr, data & 0xFFFF);
 				WriteHalf(addr + 2, data >> 16 & 0xFFFF);
-				break;
 			}
 			}
 		};

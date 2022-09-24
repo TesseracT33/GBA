@@ -16,6 +16,7 @@ namespace CPU
 {
 	export
 	{
+		void AddCycles(u64 cycles);
 		u64 GetElapsedCycles();
 		void Initialize();
 		u64 Run(u64 cycles);
@@ -153,7 +154,7 @@ namespace CPU
 	} cpsr;
 
 	bool irq;
-	bool suspend;
+	bool suspended;
 
 	std::array<u32, 5> r8_r12_non_fiq; /* R8-R12 */
 	std::array<u32, 5> r8_r12_fiq; /* R8-R12 */

@@ -16,6 +16,7 @@ namespace DMA
 {
 	export
 	{
+		void AddCycles(u64 cycles, uint h);
 		void Initialize();
 		void OnHBlank();
 		void OnVBlank();
@@ -46,6 +47,7 @@ namespace DMA
 		u32 dst_addr_incr;
 		u32 src_addr;
 		u32 src_addr_incr;
+		u64 cycle;
 		struct Control
 		{
 			u16 : 5;

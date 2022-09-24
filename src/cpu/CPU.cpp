@@ -11,6 +11,12 @@ import Scheduler;
 
 namespace CPU
 {
+	void AddCycles(u64 cycles)
+	{
+		cycle += cycles;
+	}
+
+
 	bool CheckCondition(u32 cond)
 	{
 		switch (cond & 0xF) {
@@ -117,9 +123,9 @@ namespace CPU
 
 	u64 Run(u64 cycles)
 	{
-		suspend = false;
+		suspended = false;
 		cycle = 0;
-		while (cycle < cycles && !suspend) {
+		while (cycle < cycles && !suspended) {
 			StepPipeline();
 		}
 		return cycle;
@@ -279,7 +285,7 @@ namespace CPU
 
 	void SuspendRun()
 	{
-		suspend = true;
+		suspended = true;
 	}
 
 

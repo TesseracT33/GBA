@@ -1,5 +1,6 @@
 export module Bus;
 
+import Scheduler;
 import Util;
 
 import <array>;
@@ -128,15 +129,33 @@ namespace Bus
 
 		void Initialize();
 		constexpr std::optional<std::string_view> IoAddrToStr(u32 addr);
-		template<std::integral Int> Int Read(u32 addr);
+		template<std::integral Int, Scheduler::DriverType driver = Scheduler::DriverType::Cpu> Int Read(u32 addr);
 		template<std::integral Int> Int ReadOpenBus(u32 addr);
-		template<std::integral Int> void Write(u32 addr, Int data);
+		template<std::integral Int, Scheduler::DriverType driver = Scheduler::DriverType::Cpu> void Write(u32 addr, Int data);
 	}
 
 	template<std::integral Int> Int ReadIo(u32 addr);
 	template<std::integral Int> void WriteIo(u32 addr, Int data);
+	void WriteWaitcnt(u16 data);
+	void WriteWaitcntLo(u8 data);
+	void WriteWaitcntHi(u8 data);
 
-	u16 waitcnt;
+	/* First Access (Non-sequential) and Second Access (Sequential) define the waitstates for N and S cycles, the actual access time is 1 clock cycle PLUS the number of waitstates. */
+	constexpr std::array cart_wait_1st_access = {5, 4, 3, 9};
+	constexpr std::array<std::array<u8, 2>, 3> cart_wait_2nd_access = {{ {3, 2}, {5, 2}, {9, 2} }}; /* wait state * waitcnt setting */
+	constexpr std::array sram_wait = {5, 4, 3, 9};
+
+	struct WAITCNT
+	{
+		bool game_pak_type_flag;
+		bool prefetch_buffer_enable;
+		u8 cart_wait[3][2]; /* wait state * sequential access */
+		u8 phi_terminal_output;
+		u8 sram_wait;
+		u16 raw;
+	} waitcnt;
+
+	u32 next_addr_for_sequential_access;
 
 	std::array<u8, 0x40000> board_wram;
 	std::array<u8, 0x8000> chip_wram;

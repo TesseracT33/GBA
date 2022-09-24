@@ -51,7 +51,7 @@ namespace Scheduler
 	void EngageDriver(DriverType type, DriverRunFunc run_func, DriverSuspendFunc suspend_func)
 	{
 		for (auto it = drivers.begin(); it != drivers.end(); ++it) {
-			if (GetDriverPriority(it->type) > GetDriverPriority(type)) {
+			if (GetDriverPriority(it->type) < GetDriverPriority(type)) {
 				drivers.emplace(it, type, run_func, suspend_func);
 				if (it == drivers.begin()) {
 					(++it)->suspend_function();
