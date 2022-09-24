@@ -71,8 +71,7 @@ namespace Scheduler
 
 	u64 GetGlobalTime()
 	{
-		global_time += CPU::GetElapsedCycles();
-		return global_time;
+		return global_time + CPU::GetElapsedCycles();
 	}
 
 

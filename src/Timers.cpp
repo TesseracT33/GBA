@@ -37,6 +37,7 @@ namespace Timers
 		Timer& t = timer[timer_id];
 		IRQ::Raise(t.irq_source);
 		Scheduler::AddEvent(t.overflow_event, t.period, OnOverflowWithIrq<timer_id>);
+		t.reload_on_last_overflow = t.reload;
 		t.time_until_overflow = t.period;
 	}
 
@@ -122,13 +123,13 @@ namespace Timers
 
 		auto WriteHalf = [](u32 addr, u16 data) {
 			switch (addr) {
-			case Bus::ADDR_TM0CNT_L: timer[0].reload = data; break;
+			case Bus::ADDR_TM0CNT_L: timer[0].WriteReload(data); break;
 			case Bus::ADDR_TM0CNT_H: timer[0].WriteControl(data & 0xFF); break;
-			case Bus::ADDR_TM1CNT_L: timer[1].reload = data; break;
+			case Bus::ADDR_TM1CNT_L: timer[1].WriteReload(data); break;
 			case Bus::ADDR_TM1CNT_H: timer[1].WriteControl(data & 0xFF); break;
-			case Bus::ADDR_TM2CNT_L: timer[2].reload = data; break;
+			case Bus::ADDR_TM2CNT_L: timer[2].WriteReload(data); break;
 			case Bus::ADDR_TM2CNT_H: timer[2].WriteControl(data & 0xFF); break;
-			case Bus::ADDR_TM3CNT_L: timer[3].reload = data; break;
+			case Bus::ADDR_TM3CNT_L: timer[3].WriteReload(data); break;
 			case Bus::ADDR_TM3CNT_H: timer[3].WriteControl(data & 0xFF); break;
 			}
 		};
@@ -155,6 +156,7 @@ namespace Timers
 		else {
 			increment -= counter_max_exclusive - counter;
 			counter = increment % counter_max_exclusive;
+			reload_on_last_overflow = reload;
 			time_until_overflow = counter_max_exclusive - counter;
 			if (next_timer != nullptr && next_timer->control.enable && next_timer->control.count_up) {
 				u64 num_overflows = 1 + increment / counter_max_exclusive;
@@ -168,7 +170,7 @@ namespace Timers
 	u16 Timer::GetRealCounter()
 	{
 		static constexpr std::array prescaler_shift = { 0, 6, 8, 10 };
-		return (reload + (counter >> prescaler_shift[control.prescaler])) & 0xFFFF;
+		return (reload_on_last_overflow + (counter >> prescaler_shift[control.prescaler])) & 0xFFFF;
 	}
 
 
@@ -184,13 +186,21 @@ namespace Timers
 	}
 
 
-	void Timer::OnWriteControlTimerEnabled(u16 real_counter)
+	void Timer::OnWriteControlTimerEnabled(Control new_control)
 	{
 		const u64 global_time = Scheduler::GetGlobalTime();
+		const u16 real_counter = GetRealCounter();
+		const bool prev_enable = control.enable;
+		control = new_control;
 		counter_max_exclusive = 0x10000 - reload;
 		if (control.count_up && prev_timer != nullptr) { /* TODO: for timer 0, use prescaler even if count_up is set? */
 			period = counter_max_exclusive * prev_timer->period;
-			counter = real_counter;
+			if (prev_enable) {
+				counter = real_counter;
+			}
+			else {
+				ReloadCounter();
+			}
 			if (prev_timer->is_counting) {
 				Timer* t = prev_timer;
 				while (t->control.count_up && t->prev_timer != nullptr) {
@@ -208,7 +218,12 @@ namespace Timers
 		else {
 			counter_max_exclusive *= prescaler_to_period[control.prescaler];
 			period = counter_max_exclusive;
-			counter = real_counter * prescaler_to_period[control.prescaler] + (global_time & (prescaler_to_period[control.prescaler] - 1));
+			if (prev_enable) {
+				counter = real_counter * prescaler_to_period[control.prescaler] + (global_time & (prescaler_to_period[control.prescaler] - 1));
+			}
+			else {
+				ReloadCounter();
+			}
 			time_until_overflow = counter_max_exclusive - counter;
 			time_last_counter_refresh = global_time;
 			if (control.irq_enable) {
@@ -225,6 +240,13 @@ namespace Timers
 			UpdateCounter();
 		}
 		return GetRealCounter();
+	}
+
+
+	void Timer::ReloadCounter()
+	{
+		counter = 0;
+		reload_on_last_overflow = reload;
 	}
 
 
@@ -246,14 +268,13 @@ namespace Timers
 
 	void Timer::UpdatePeriod()
 	{
-		/* TODO: do we need to update period if we're disabled? */
-		counter_max_exclusive = 0x10000 - reload;
-		if (!control.count_up) { /* TODO: for timer 0, use prescaler even if count_up is set? */
+		counter_max_exclusive = 0x10000 - reload; /* TODO: this doesn't work. Changing this directly may change the time until next overflow (undesirable) */
+		if (control.count_up && prev_timer != nullptr) {
+			period = counter_max_exclusive * prev_timer->period;
+		}
+		else {
 			counter_max_exclusive *= prescaler_to_period[control.prescaler];
 			period = counter_max_exclusive;
-		}
-		else if (prev_timer != nullptr) {
-			period = counter_max_exclusive * prev_timer->period;
 		}
 		/* Note: changing the period won't affect when this timer will overflow, but it can for other ones. */
 		Timer* t = this;
@@ -299,15 +320,17 @@ namespace Timers
 
 	void Timer::WriteControl(u8 data)
 	{
-		bool prev_enable = control.enable;
-		if (control.enable) {
-			u16 real_counter = GetRealCounter();
-			control = std::bit_cast<Control>(data);
-			OnWriteControlTimerEnabled(real_counter);
+		bool enable = data & 0x80;
+		Control new_control = std::bit_cast<Control>(data);
+		if (enable) {
+			OnWriteControlTimerEnabled(new_control);
 		}
-		else if (prev_enable) {
-			control = std::bit_cast<Control>(data);
-			OnDisable();
+		else {
+			bool prev_enable = control.enable;
+			if (prev_enable) {
+				control = new_control;
+				OnDisable();
+			}
 		}
 	}
 
@@ -315,14 +338,18 @@ namespace Timers
 	void Timer::WriteReload(u8 value, u8 byte_index)
 	{
 		SetByte(reload, byte_index, value);
-		UpdatePeriod();
+		if (control.enable) {
+			UpdatePeriod();
+		}
 	}
 
 
 	void Timer::WriteReload(u16 value)
 	{
 		reload = value;
-		UpdatePeriod();
+		if (control.enable) {
+			UpdatePeriod();
+		}
 	}
 
 

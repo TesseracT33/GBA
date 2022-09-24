@@ -30,8 +30,9 @@ namespace Timers
 		void AddToCounter(u64 value);
 		u16 GetRealCounter();
 		void OnDisable();
-		void OnWriteControlTimerEnabled(u16 real_counter);
+		void OnWriteControlTimerEnabled(Control new_control);
 		u16 ReadCounter();
+		void ReloadCounter();
 		void UpdateCounter();
 		void UpdatePeriod();
 		template<bool start_timer_is_enabled> void UpdateTimerChainOnTimerStatusChange();
@@ -48,6 +49,7 @@ namespace Timers
 		} control;
 		bool is_counting; /* Timer 0: == control.enable; Others: == control.enable && (!control.count_up || prev_timer->is_counting) */
 		u16 reload;
+		u16 reload_on_last_overflow;
 		u64 counter; /* Let the range be [0, (0x10000 - reload) * prescaler_period - 1] instead of [reload, 0xFFFF] for easier computations */
 		u64 counter_max_exclusive;
 		u64 period;
