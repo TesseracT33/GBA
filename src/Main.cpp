@@ -13,8 +13,8 @@ int main(int argc, char** argv) /* Optional CLI arguments: path to rom, path to 
 	bool boot_game_immediately = false;
 	if (argc >= 2) {
 		auto rom_path = argv[1];
-		Frontend::LoadGame(rom_path);
-		boot_game_immediately = true;
+		bool success = Frontend::LoadGame(rom_path);
+		boot_game_immediately = success;
 		if (argc >= 3) {
 			auto bios_path = argv[2];
 			Frontend::LoadBios(bios_path);
