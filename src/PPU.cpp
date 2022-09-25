@@ -246,9 +246,9 @@ namespace PPU
 	RGB BrightnessDecrease(RGB pixel)
 	{
 		return {
-			.r = u8(pixel.r - pixel.r * evy),
-			.g = u8(pixel.g - pixel.g * evy),
-			.b = u8(pixel.b - pixel.b * evy)
+			.r = u8(std::min(0, pixel.r - pixel.r * evy)),
+			.g = u8(std::min(0, pixel.g - pixel.g * evy)),
+			.b = u8(std::min(0, pixel.b - pixel.b * evy))
 		};
 	}
 
@@ -256,9 +256,9 @@ namespace PPU
 	RGB BrightnessIncrease(RGB pixel)
 	{
 		return {
-			.r = u8(pixel.r + (31 - pixel.r) * evy),
-			.g = u8(pixel.g + (31 - pixel.g) * evy),
-			.b = u8(pixel.b + (31 - pixel.b) * evy)
+			.r = u8(std::max(31, pixel.r + (31 - pixel.r) * evy)),
+			.g = u8(std::max(31, pixel.g + (31 - pixel.g) * evy)),
+			.b = u8(std::max(31, pixel.b + (31 - pixel.b) * evy))
 		};
 	}
 
