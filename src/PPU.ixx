@@ -56,23 +56,26 @@ namespace PPU
 
 	struct ObjData
 	{
-		u64 y_coord : 8;
-		u64 rotate_scale : 1;
-		u64 double_size_obj_disable : 1;
-		u64 obj_mode : 2;
-		u64 obj_mosaic : 1;
-		u64 palette_mode : 1;
-		u64 obj_shape : 2;
+		u16 y_coord : 8;
+		u16 rotate_scale : 1;
+		u16 double_size_obj_disable : 1;
+		u16 obj_mode : 2;
+		u16 obj_mosaic : 1;
+		u16 palette_mode : 1;
+		u16 obj_shape : 2;
 
-		u64 x_coord : 9;
-		u64 rot_scale_param : 5;
-		u64 obj_size : 2;
+		u16 x_coord : 9;
+		u16 rot_scale_param : 5;
+		u16 obj_size : 2;
 
-		u64 tile_num : 10;
-		u64 priority : 2;
-		u64 palette_num : 4;
+		u16 tile_num : 10;
+		u16 priority : 2;
+		u16 palette_num : 4;
 
-		u64 : 16;
+		u8 span;
+		u8 dot_start;
+		u8 size_x;
+		u8 oam_index;
 	};
 
 	RGB AlphaBlend(RGB target_1, RGB target_2);
@@ -80,7 +83,6 @@ namespace PPU
 	RGB BrightnessDecrease(RGB pixel);
 	RGB BrightnessIncrease(RGB pixel);
 	BgColorData GetBackdropColor();
-	u8 GetObjectWidth(ObjData obj_data);
 	void OnHBlank();
 	void OnHBlankSetFlag();
 	void OnNewScanline();
@@ -236,18 +238,6 @@ namespace PPU
 
 	u8 eva, evb, evy;
 	std::array<u8, 2> winh_x1, winh_x2, winv_y1, winv_y2;
-
-	/* Size  Square   Horizontal  Vertical
-	0     8x8      16x8        8x16
-	1     16x16    32x8        8x32
-	2     32x32    32x16       16x32
-	3     64x64    64x32       32x64 */
-	constexpr u8 size_x[4][4] = {
-		8, 16, 8, 8,
-		16, 32, 8, 16,
-		32, 32, 16, 32,
-		64, 64, 32, 64
-	};
 
 	bool in_hblank;
 	bool in_vblank;

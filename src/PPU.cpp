@@ -272,13 +272,6 @@ namespace PPU
 	}
 
 
-	u8 GetObjectWidth(ObjData obj_data)
-	{
-		return u8((1 + obj_data.double_size_obj_disable) *
-			size_x[obj_data.obj_size][obj_data.obj_shape]);
-	}
-
-
 	void Initialize()
 	{
 		std::memset(&dispcnt, 0, sizeof(dispcnt));
@@ -315,6 +308,7 @@ namespace PPU
 		palette_ram.fill(0);
 		vram.fill(0);
 		objects.clear();
+		objects.reserve(128);
 
 		framebuffer.resize(framebuffer_width * framebuffer_height * 3, 0);
 		Video::SetFramebufferPtr(framebuffer.data());
@@ -629,12 +623,11 @@ namespace PPU
 		}
 
 		if (dispcnt.screen_display_obj) {
+			ScanOam();
 			ScanlineObjects();
 		}
 		else {
-			for (uint dot = 0; dot < dots_per_line; ++dot) {
-				obj_render[dot] = transparent_obj_pixel;
-			}
+			obj_render.fill(transparent_obj_pixel);
 		}
 
 		BlendLayers();
@@ -657,12 +650,6 @@ namespace PPU
 		for (uint dot = 0; dot < dots_per_line; ++dot) {
 			bg_render[bg][dot] = transparent_bg_pixel;
 		}
-	}
-
-
-	void ScanlineBackgroundRotateScaleMode(uint bg)
-	{
-
 	}
 
 
@@ -767,6 +754,12 @@ namespace PPU
 	}
 
 
+	void ScanlineBackgroundRotateScaleMode(uint bg)
+	{
+
+	}
+
+
 	void ScanlineBackgroundBitmapMode3()
 	{
 		constexpr static uint col_size = 2;
@@ -828,22 +821,140 @@ namespace PPU
 
 	void ScanlineObjects()
 	{
-		uint current_obj_oam_index = 0;
+		if (objects.empty()) {
+			obj_render.fill(transparent_obj_pixel);
+			return;
+		}
+		static constexpr uint col_size = 2;
+		const bool char_vram_mapping = dispcnt.obj_char_vram_mapping; /* 0: 2D; 1: 1D */
+		const uint vram_base_addr = dispcnt.bg_mode < 3 ? 0x10000 : 0x14000;
 
-		auto FetchSprite = [&](ObjData obj_data) {
+		uint dot = 0;
 
-		};
+		auto RenderObject = [&](ObjData& obj) {
+			if (!obj.rotate_scale) {
+				const bool flip_x = obj.rot_scale_param & 8;
+				const bool flip_y = obj.rot_scale_param & 16;
+				auto tile_offset_x = (dot - obj.x_coord) / 8;
+				auto tile_offset_y = (v_counter - obj.y_coord) / 8;
+				auto tile_pixel_offset_x = (dot - obj.x_coord) % 8;
+				auto tile_pixel_offset_y = (v_counter - obj.y_coord) % 8;
+				if (flip_x) {
+					tile_pixel_offset_x = 7 - tile_pixel_offset_x;
+				}
+				if (flip_y) {
+					tile_pixel_offset_y = 7 - tile_pixel_offset_y;
+				}
+				auto base_tile_num = obj.tile_num;
+				u32 rel_tile_num;
+				if (obj.palette_mode == 0) {
+					/* 4-bit depth (16 colors, 16 palettes). Each tile occupies 32 bytes of memory, the first 4 bytes for the topmost row of the tile, and so on.
+						Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot. */
+					const u32 base_tile_data_addr = vram_base_addr + 32 * base_tile_num + 4 * tile_pixel_offset_y;
 
-		for (uint dot = 0; dot < dots_per_line; ++dot) {
-			/* Find sprite. The lower the oam index, the higher the priority. */
-			for (ObjData obj_data : objects) {
-				if (obj_data.x_coord <= dot) {
-					auto obj_width = GetObjectWidth(obj_data);
-					if (obj_data.x_coord + obj_width > dot) {
+					auto FetchPushTile = [&](uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
+						u32 tile_data_addr = base_tile_data_addr + 32 * rel_tile_num;
+						const u8* palette_start_ptr = palette_ram.data() + 16 * col_size * obj.palette_num;
+						uint col_shift = (pixels_to_ignore_left & 1) ? 4 : 0; /* access lower nibble of byte if tile pixel index is even, else higher nibble. */
+						auto FetchPushPixel = [&](uint pixel_index) {
+							u8 col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
+							ObjColorData col;
+							std::memcpy(&col, palette_start_ptr + col_size * col_id, col_size);
+							col.transparent = col_id == 0;
+							col.obj_mode = obj.obj_mode;
+							col.priority = obj.priority;
+							obj_render[dot++] = col;
+						};
+						if (flip_x) {
+							for (int i = 7 - pixels_to_ignore_right; i >= (int)pixels_to_ignore_left; --i, col_shift ^= 4) {
+								FetchPushPixel(i);
+							}
+						}
+						else {
+							for (int i = pixels_to_ignore_left; i < 8 - (int)pixels_to_ignore_right; ++i, col_shift ^= 4) {
+								FetchPushPixel(i);
+							}
+						}
+					};
+					/* Char VRAM Mapping = 0: The 1024 OBJ tiles are arranged as a matrix of 32x32 tiles / 256x256 pixels (In 256 color mode: 16x32 tiles / 128x256 pixels)
+						E.g., when displaying a 16x16 pixel OBJ with tile number 04h, the upper row of the OBJ will consist of tile 04h and 05h, the next row of 24h and 25h. (In 256 color mode: 04h and 06h, 24h and 26h.)
+						Char VRAM Mapping = 1: Tiles are mapped each after each other from 00h-3FFh. Using the same example as above, the upper row of the OBJ
+							will consist of tile 04h and 05h, the next row of tile 06h and 07h. (In 256 color mode: 04h and 06h, 08h and 0Ah.)*/
+					rel_tile_num = tile_offset_x + (char_vram_mapping == 0
+						? tile_offset_y * 32
+						: tile_offset_y * obj.size_x / 8);
+					auto pixels_to_ignore_left = tile_pixel_offset_x;
+					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(obj.span));
+					FetchPushTile(pixels_to_ignore_left, pixels_to_ignore_right);
+					obj.span -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
+					for (int tile = 0; tile < obj.span / 8; ++tile) {
+						++rel_tile_num;
+						FetchPushTile(0, 0);
+					}
+					if (obj.span % 8) {
+						++rel_tile_num;
+						FetchPushTile(0, 8 - obj.span % 8);
+					}
+				}
+				else {
+					/* 8-bit depth (256 colors, 1 palette). Each tile occupies 64 bytes of memory, the first 8 bytes for the topmost row of the tile, etc..
+						Each byte selects the palette entry for each dot. */
 
+					/* When using the 256 Colors/1 Palette mode, only each second tile may be used, the lower bit
+						of the tile number should be zero (in 2-dimensional mapping mode, the bit is completely ignored). */
+					base_tile_num &= ~1;
+					const u32 base_tile_data_addr = vram_base_addr + 64 * base_tile_num + 8 * tile_pixel_offset_y;
+
+					auto FetchPushTile = [&](uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
+						u32 tile_data_addr = base_tile_data_addr + 64 * rel_tile_num;
+						auto FetchPushPixel = [&](uint pixel_index) {
+							u8 col_id = vram[tile_data_addr + pixel_index];
+							ObjColorData col;
+							std::memcpy(&col, palette_ram.data() + col_size * col_id, col_size);
+							col.transparent = col_id == 0;
+							col.obj_mode = obj.obj_mode;
+							col.priority = obj.priority;
+							obj_render[dot++] = col;
+						};
+						if (flip_x) {
+							for (int i = 7 - pixels_to_ignore_right; i >= (int)pixels_to_ignore_left; --i) {
+								FetchPushPixel(i);
+							}
+						}
+						else {
+							for (int i = pixels_to_ignore_left; i < 8 - (int)pixels_to_ignore_right; ++i) {
+								FetchPushPixel(i);
+							}
+						}
+					};
+
+					rel_tile_num = char_vram_mapping == 0
+						? tile_offset_x + tile_offset_y * 32
+						: tile_offset_x * 2 + tile_offset_y * obj.size_x / 8;
+					auto pixels_to_ignore_left = tile_pixel_offset_x;
+					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(obj.span));
+					FetchPushTile(pixels_to_ignore_left, pixels_to_ignore_right);
+					obj.span -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
+					for (int tile = 0; tile < obj.span / 8; ++tile) {
+						rel_tile_num += 2;
+						FetchPushTile(0, 0);
+					}
+					if (obj.span % 8) {
+						rel_tile_num += 2;
+						FetchPushTile(0, 8 - obj.span % 8);
 					}
 				}
 			}
+		};
+
+		std::ranges::for_each(objects, [&](ObjData& obj) {
+			while (dot < obj.dot_start) {
+				obj_render[dot++] = transparent_obj_pixel;
+			}
+			RenderObject(obj);
+		});
+		while (dot < dots_per_line) {
+			obj_render[dot++] = transparent_obj_pixel;
 		}
 	}
 
@@ -887,6 +998,7 @@ namespace PPU
 			  10-11 Priority relative to BG (0-3; 0=Highest)
 			  12-15 Palette Number   (0-15) (Not used in 256 color/1 palette mode)
 		*/
+		objects.clear();
 		for (uint oam_addr = 0; oam_addr < oam.size(); oam_addr += 8) {
 			bool rotate_scale = oam[oam_addr + 1] & 1;
 			bool double_size_obj_disable = oam[oam_addr + 1] & 2;
@@ -894,23 +1006,47 @@ namespace PPU
 				continue;
 			}
 			u8 y_coord = oam[oam_addr];
-			if (y_coord <= v_counter) {
-				u8 obj_shape = oam[oam_addr + 1] >> 6 & 3;
-				u8 obj_size = oam[oam_addr + 5] >> 6 & 3;
-				static constexpr u8 obj_size_y[4][4] = {
-					8, 8, 16, 8,
-					16, 8, 32, 16,
-					32, 16, 32, 32,
-					64, 32, 64, 64
-				};
-				u8 obj_height = (1 + double_size_obj_disable) * obj_size_y[obj_size][obj_shape];
-				if (y_coord + obj_height > v_counter) {
-					ObjData obj_data;
-					std::memcpy(&obj_data, oam.data() + oam_addr, 6);
-					objects.push_back(obj_data);
-				}
+			if (y_coord > v_counter) {
+				continue;
 			}
+			u16 x_coord = oam[oam_addr + 2] | (oam[oam_addr + 3] & 1) << 8;
+			if (x_coord >= dots_per_line) {
+				continue;
+			}
+			u8 obj_shape = oam[oam_addr + 1] >> 6 & 3;
+			u8 obj_size = oam[oam_addr + 3] >> 6 & 3;
+			static constexpr u8 obj_height_table[4][4] = { /* OBJ Size (0-3) * OBJ Shape (0-2 (3 prohibited)) */
+				8, 8, 16, 8,
+				16, 8, 32, 16,
+				32, 16, 32, 32,
+				64, 32, 64, 64
+			};
+			static constexpr u8 obj_width_table[4][4] = {
+				8, 16, 8, 8,
+				16, 32, 8, 16,
+				32, 32, 16, 32,
+				64, 64, 32, 64
+			};
+			u8 obj_height = obj_height_table[obj_size][obj_shape] << (double_size_obj_disable & rotate_scale);
+			if (y_coord + obj_height <= v_counter) {
+				continue;
+			}
+			ObjData obj_data;
+			std::memcpy(&obj_data, oam.data() + oam_addr, 6);
+			obj_data.size_x = obj_width_table[obj_size][obj_shape] << (double_size_obj_disable & rotate_scale);
+			obj_data.oam_index = oam_addr / 8;
+			/* Sort the objects so that the first object in the vector is the left-most object to be rendered on the current scanline.
+				If two objects have the same x-coordinates, the one with the smaller oam index has priority. */
+			auto it = std::ranges::find_if(objects, [&](const ObjData& obj) {
+				return obj_data.x_coord < obj.x_coord;
+			});
+			objects.insert(it, obj_data);
 		}
+		if (objects.empty()) {
+			return;
+		}
+		/* For each object, determine on which dots it should be rendered. */
+		/* TODO */
 	}
 
 
