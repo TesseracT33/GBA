@@ -149,12 +149,12 @@ namespace Timers
 
 	void Timer::AddToCounter(u64 increment)
 	{
-		if (counter + increment < counter_max_exclusive) {
+		if (increment < time_until_overflow) {
 			counter += increment;
-			time_until_overflow = counter_max_exclusive - counter;
+			time_until_overflow -= increment;
 		}
 		else {
-			increment -= counter_max_exclusive - counter;
+			increment -= time_until_overflow;
 			counter = increment % counter_max_exclusive;
 			reload_on_last_overflow = reload;
 			time_until_overflow = counter_max_exclusive - counter;
@@ -189,11 +189,11 @@ namespace Timers
 	void Timer::OnWriteControlTimerEnabled(Control new_control)
 	{
 		const u64 global_time = Scheduler::GetGlobalTime();
-		const u16 real_counter = GetRealCounter();
+		const u16 real_counter = GetRealCounter(); /* important: call before setting new control, as this depends on control */
 		const bool prev_enable = control.enable;
 		control = new_control;
 		counter_max_exclusive = 0x10000 - reload;
-		if (control.count_up && prev_timer != nullptr) { /* TODO: for timer 0, use prescaler even if count_up is set? */
+		if (control.count_up && prev_timer != nullptr) {
 			period = counter_max_exclusive * prev_timer->period;
 			if (prev_enable) {
 				counter = real_counter;
@@ -276,7 +276,7 @@ namespace Timers
 			counter_max_exclusive *= prescaler_to_period[control.prescaler];
 			period = counter_max_exclusive;
 		}
-		/* Note: changing the period won't affect when this timer will overflow, but it can for other ones. */
+		/* Changing the period won't affect when this timer will overflow, but it can for other ones. */
 		Timer* t = this;
 		while (t = t->next_timer, t != nullptr && t->control.count_up) {
 			t->period = t->counter_max_exclusive * t->prev_timer->period;
