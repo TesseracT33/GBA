@@ -8,6 +8,8 @@ import <bit>;
 import <cmath>;
 import <concepts>;
 import <cstring>;
+import <iterator>;
+import <stack>;
 import <utility>;
 import <vector>;
 
@@ -72,11 +74,17 @@ namespace PPU
 		u16 priority : 2;
 		u16 palette_num : 4;
 
-		u8 span;
-		u8 dot_start;
 		u8 size_x;
 		u8 oam_index;
 	};
+
+	struct ObjRenderJob
+	{
+		u8 obj_index;
+		u16 dot_start;
+		u8 length;
+	};
+
 
 	RGB AlphaBlend(RGB target_1, RGB target_2);
 	void BlendLayers();
@@ -86,6 +94,7 @@ namespace PPU
 	void OnHBlank();
 	void OnHBlankSetFlag();
 	void OnNewScanline();
+	void PrepareObjRenderJobs();
 	void PushPixel(auto color_data);
 	void PushPixel(RGB rgb);
 	void PushPixel(u8 r, u8 g, u8 b);
@@ -258,4 +267,5 @@ namespace PPU
 	std::array<u8, 0x18000> vram;
 	std::vector<u8> framebuffer;
 	std::vector<ObjData> objects;
+	std::vector<ObjRenderJob> obj_render_jobs{};
 }

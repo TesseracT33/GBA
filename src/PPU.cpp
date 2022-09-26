@@ -309,6 +309,7 @@ namespace PPU
 		vram.fill(0);
 		objects.clear();
 		objects.reserve(128);
+		obj_render_jobs.clear();
 
 		framebuffer.resize(framebuffer_width * framebuffer_height * 3, 0);
 		Video::SetFramebufferPtr(framebuffer.data());
@@ -373,6 +374,73 @@ namespace PPU
 		}
 		else {
 			v_counter %= total_num_lines; /* cheaper than comparison on ly == total_num_lines to set ly = 0? */
+		}
+	}
+
+
+	void PrepareObjRenderJobs()
+	{
+		/* For each object, determine on which dots it should be rendered. */
+		obj_render_jobs.clear();
+		if (objects.empty()) {
+			return;
+		}
+		if (objects.size() == 1) {
+			obj_render_jobs.emplace_back(0, u16(objects[0].x_coord), std::min((uint)objects[0].size_x, dots_per_line - objects[0].x_coord));
+			return;
+		}
+		u16 last_obj_end = 0;
+		std::stack<size_t> obj_stack{};
+		std::vector<u8> obj_handled;
+		obj_handled.resize(objects.size(), false);
+		auto ScheduleEntireObj = [&](size_t& idx, u8 obj_start, u8 obj_end) {
+			obj_render_jobs.emplace_back(u8(idx), obj_start, obj_end - obj_start);
+			last_obj_end = obj_end;
+			obj_handled[idx] = true;
+			if (obj_stack.empty()) {
+				++idx;
+			}
+			else {
+				idx = obj_stack.top();
+				obj_stack.pop();
+			}
+		};
+		for (size_t i = 0; i < objects.size(); ) {
+			if (obj_handled[i]) {
+				++i;
+				continue;
+			}
+			ObjData& obj = objects[i];
+			u8 obj_start = std::max(obj.x_coord, last_obj_end) & 0xFF;
+			u8 obj_end = std::min(uint(obj.x_coord + obj.size_x), dots_per_line) & 0xFF;
+			if (obj_start >= obj_end) { /* object is fully occluded */
+				obj_handled[i++] = true;
+				continue;
+			}
+			size_t first_unhandled_obj = std::distance(obj_handled.begin(),
+				std::find(obj_handled.begin() + i + 1, obj_handled.end(), false));
+			if (first_unhandled_obj == objects.size() || obj_end <= objects[first_unhandled_obj].x_coord) { /* no collisions */
+				ScheduleEntireObj(i, obj_start, obj_end);
+			}
+			else { /* collision(s) */
+				bool higher_prio_colliding_obj_found = false;
+				for (size_t j = i + first_unhandled_obj; j < objects.size(); ++j) {
+					if (obj_end <= objects[j].x_coord) { /* reached the end of colliding objects; no colliding objects with higher prio found */
+						break;
+					}
+					if (obj.oam_index > objects[j].oam_index) { /* colliding object with higher prio found */
+						obj_render_jobs.emplace_back(i, obj_start, objects[j].x_coord - obj_start);
+						last_obj_end = objects[j].x_coord;
+						obj_stack.emplace(i);
+						i = j;
+						higher_prio_colliding_obj_found = true;
+						break;
+					}
+				}
+				if (!higher_prio_colliding_obj_found) {
+					ScheduleEntireObj(i, obj_start, obj_end);
+				}
+			}
 		}
 	}
 
@@ -624,6 +692,7 @@ namespace PPU
 
 		if (dispcnt.screen_display_obj) {
 			ScanOam();
+			PrepareObjRenderJobs();
 			ScanlineObjects();
 		}
 		else {
@@ -828,15 +897,16 @@ namespace PPU
 		static constexpr uint col_size = 2;
 		const bool char_vram_mapping = dispcnt.obj_char_vram_mapping; /* 0: 2D; 1: 1D */
 		const uint vram_base_addr = dispcnt.bg_mode < 3 ? 0x10000 : 0x14000;
+		const uint vram_addr_mask = 0x17FFF - vram_base_addr;
 
 		uint dot = 0;
 
-		auto RenderObject = [&](ObjData& obj) {
+		auto RenderObject = [&](ObjData& obj, u8 num_dots) {
 			if (!obj.rotate_scale) {
 				const bool flip_x = obj.rot_scale_param & 8;
 				const bool flip_y = obj.rot_scale_param & 16;
-				auto tile_offset_x = (dot - obj.x_coord) / 8;
-				auto tile_offset_y = (v_counter - obj.y_coord) / 8;
+				const auto tile_offset_x = (dot - obj.x_coord) / 8;
+				const auto tile_offset_y = (v_counter - obj.y_coord) / 8;
 				auto tile_pixel_offset_x = (dot - obj.x_coord) % 8;
 				auto tile_pixel_offset_y = (v_counter - obj.y_coord) % 8;
 				if (flip_x) {
@@ -850,7 +920,7 @@ namespace PPU
 				if (obj.palette_mode == 0) {
 					/* 4-bit depth (16 colors, 16 palettes). Each tile occupies 32 bytes of memory, the first 4 bytes for the topmost row of the tile, and so on.
 						Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot. */
-					const u32 base_tile_data_addr = vram_base_addr + 32 * base_tile_num + 4 * tile_pixel_offset_y;
+					const u32 base_tile_data_addr = vram_base_addr + (32 * base_tile_num + 4 * tile_pixel_offset_y) & vram_addr_mask;
 
 					auto FetchPushTile = [&](uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
 						u32 tile_data_addr = base_tile_data_addr + 32 * rel_tile_num;
@@ -884,16 +954,16 @@ namespace PPU
 						? tile_offset_y * 32
 						: tile_offset_y * obj.size_x / 8);
 					auto pixels_to_ignore_left = tile_pixel_offset_x;
-					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(obj.span));
+					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(num_dots));
 					FetchPushTile(pixels_to_ignore_left, pixels_to_ignore_right);
-					obj.span -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
-					for (int tile = 0; tile < obj.span / 8; ++tile) {
+					num_dots -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
+					for (int tile = 0; tile < num_dots / 8; ++tile) {
 						++rel_tile_num;
 						FetchPushTile(0, 0);
 					}
-					if (obj.span % 8) {
+					if (num_dots % 8) {
 						++rel_tile_num;
-						FetchPushTile(0, 8 - obj.span % 8);
+						FetchPushTile(0, 8 - num_dots % 8);
 					}
 				}
 				else {
@@ -903,7 +973,7 @@ namespace PPU
 					/* When using the 256 Colors/1 Palette mode, only each second tile may be used, the lower bit
 						of the tile number should be zero (in 2-dimensional mapping mode, the bit is completely ignored). */
 					base_tile_num &= ~1;
-					const u32 base_tile_data_addr = vram_base_addr + 64 * base_tile_num + 8 * tile_pixel_offset_y;
+					const u32 base_tile_data_addr = vram_base_addr + (64 * base_tile_num + 8 * tile_pixel_offset_y) & vram_addr_mask;
 
 					auto FetchPushTile = [&](uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
 						u32 tile_data_addr = base_tile_data_addr + 64 * rel_tile_num;
@@ -932,26 +1002,26 @@ namespace PPU
 						? tile_offset_x + tile_offset_y * 32
 						: tile_offset_x * 2 + tile_offset_y * obj.size_x / 8;
 					auto pixels_to_ignore_left = tile_pixel_offset_x;
-					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(obj.span));
+					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(num_dots));
 					FetchPushTile(pixels_to_ignore_left, pixels_to_ignore_right);
-					obj.span -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
-					for (int tile = 0; tile < obj.span / 8; ++tile) {
+					num_dots -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
+					for (int tile = 0; tile < num_dots / 8; ++tile) {
 						rel_tile_num += 2;
 						FetchPushTile(0, 0);
 					}
-					if (obj.span % 8) {
+					if (num_dots % 8) {
 						rel_tile_num += 2;
-						FetchPushTile(0, 8 - obj.span % 8);
+						FetchPushTile(0, 8 - num_dots % 8);
 					}
 				}
 			}
 		};
 
-		std::ranges::for_each(objects, [&](ObjData& obj) {
-			while (dot < obj.dot_start) {
+		std::ranges::for_each(obj_render_jobs, [&](ObjRenderJob job) {
+			while (dot < job.dot_start) {
 				obj_render[dot++] = transparent_obj_pixel;
 			}
-			RenderObject(obj);
+			RenderObject(objects[job.obj_index], job.length);
 		});
 		while (dot < dots_per_line) {
 			obj_render[dot++] = transparent_obj_pixel;
@@ -1042,11 +1112,6 @@ namespace PPU
 			});
 			objects.insert(it, obj_data);
 		}
-		if (objects.empty()) {
-			return;
-		}
-		/* For each object, determine on which dots it should be rendered. */
-		/* TODO */
 	}
 
 
