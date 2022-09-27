@@ -267,5 +267,5 @@ namespace PPU
 	std::array<u8, 0x18000> vram;
 	std::vector<u8> framebuffer;
 	std::vector<ObjData> objects;
-	std::vector<ObjRenderJob> obj_render_jobs{};
+	std::vector<ObjRenderJob> obj_render_jobs;
 }

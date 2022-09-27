@@ -386,12 +386,13 @@ namespace PPU
 			return;
 		}
 		if (objects.size() == 1) {
-			obj_render_jobs.emplace_back(0, u16(objects[0].x_coord), std::min((uint)objects[0].size_x, dots_per_line - objects[0].x_coord));
+			auto obj_length = std::min((uint)objects[0].size_x, dots_per_line - objects[0].x_coord);
+			obj_render_jobs.emplace_back(0, u16(objects[0].x_coord), obj_length);
 			return;
 		}
 		u16 last_obj_end = 0;
 		std::stack<size_t> obj_stack{};
-		std::vector<u8> obj_handled;
+		std::vector<u8> obj_handled{};
 		obj_handled.resize(objects.size(), false);
 		auto ScheduleEntireObj = [&](size_t& idx, u8 obj_start, u8 obj_end) {
 			obj_render_jobs.emplace_back(u8(idx), obj_start, obj_end - obj_start);
@@ -429,8 +430,10 @@ namespace PPU
 						break;
 					}
 					if (obj.oam_index > objects[j].oam_index) { /* colliding object with higher prio found */
-						obj_render_jobs.emplace_back(i, obj_start, objects[j].x_coord - obj_start);
-						last_obj_end = objects[j].x_coord;
+						if (obj_start < objects[j].x_coord) {
+							obj_render_jobs.emplace_back(i, obj_start, objects[j].x_coord - obj_start);
+							last_obj_end = objects[j].x_coord;
+						}
 						obj_stack.emplace(i);
 						i = j;
 						higher_prio_colliding_obj_found = true;
@@ -448,9 +451,8 @@ namespace PPU
 	void PushPixel(auto color_data)
 	{
 		if (color_data.transparent) {
-			framebuffer[framebuffer_index++] = 0xFF;
-			framebuffer[framebuffer_index++] = 0xFF;
-			framebuffer[framebuffer_index++] = 0xFF;
+			std::memset(framebuffer.data() + framebuffer_index, 0xFF, 3);
+			framebuffer_index += 3;
 		}
 		else {
 			framebuffer[framebuffer_index++] = color_data.r;
