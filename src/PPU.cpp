@@ -903,7 +903,7 @@ namespace PPU
 
 		uint dot = 0;
 
-		auto RenderObject = [&](ObjData& obj, u8 num_dots) {
+		auto RenderObject = [&](const ObjData& obj, u8 num_dots) {
 			if (!obj.rotate_scale) {
 				const bool flip_x = obj.rot_scale_param & 8;
 				const bool flip_y = obj.rot_scale_param & 16;
@@ -917,20 +917,38 @@ namespace PPU
 				if (flip_y) {
 					tile_pixel_offset_y = 7 - tile_pixel_offset_y;
 				}
-				auto base_tile_num = obj.tile_num;
-				u32 rel_tile_num;
-				if (obj.palette_mode == 0) {
-					/* 4-bit depth (16 colors, 16 palettes). Each tile occupies 32 bytes of memory, the first 4 bytes for the topmost row of the tile, and so on.
-						Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot. */
-					const u32 base_tile_data_addr = vram_base_addr + (32 * base_tile_num + 4 * tile_pixel_offset_y) & vram_addr_mask;
-
+				auto RenderObject = [&] <bool palette_mode> {
+					/* Palette Mode 0: 4-bit depth (16 colors, 16 palettes). Each tile occupies 32 bytes of memory, the first 4 bytes for the topmost row of the tile, and so on.
+						Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot. 
+						Palette Mode 1: 8-bit depth (256 colors, 1 palette). Each tile occupies 64 bytes of memory, the first 8 bytes for the topmost row of the tile, etc..
+						Each byte selects the palette entry for each dot. */
+					static constexpr uint tile_size = [&] {
+						if constexpr (palette_mode == 0) return 32;
+						else                             return 64;
+					}();
+					static constexpr uint tile_row_size = tile_size / 8;
+					/* When using the 256 Colors/1 Palette mode, only each second tile may be used, the lower bit
+						of the tile number should be zero (in 2-dimensional mapping mode, the bit is completely ignored). */
+					u32 base_tile_num = obj.tile_num;
+					if constexpr (palette_mode == 1) {
+						base_tile_num &= ~1;
+					}
+					u32 tile_data_addr_offset;
 					auto FetchPushTile = [&](uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
-						u32 tile_data_addr = base_tile_data_addr + 32 * rel_tile_num;
-						const u8* palette_start_ptr = palette_ram.data() + 16 * col_size * obj.palette_num;
-						uint col_shift = (pixels_to_ignore_left & 1) ? 4 : 0; /* access lower nibble of byte if tile pixel index is even, else higher nibble. */
+						u32 tile_data_addr = vram_base_addr + (tile_data_addr_offset & vram_addr_mask);
+						uint col_shift; 
 						auto FetchPushPixel = [&](uint pixel_index) {
-							u8 col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
 							ObjColorData col;
+							u8 col_id;
+							const u8* palette_start_ptr;
+							if constexpr (palette_mode == 0) {
+								col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF; 
+								palette_start_ptr = palette_ram.data() + 16 * col_size * obj.palette_num;
+							}
+							else {
+								col_id = vram[tile_data_addr + pixel_index];
+								palette_start_ptr = palette_ram.data();
+							}
 							std::memcpy(&col, palette_start_ptr + col_size * col_id, col_size);
 							col.transparent = col_id == 0;
 							col.obj_mode = obj.obj_mode;
@@ -938,11 +956,13 @@ namespace PPU
 							obj_render[dot++] = col;
 						};
 						if (flip_x) {
+							col_shift = (pixels_to_ignore_right & 1) ? 0 : 4; /* access lower nibble of byte if tile pixel index is even, else higher nibble. */
 							for (int i = 7 - pixels_to_ignore_right; i >= (int)pixels_to_ignore_left; --i, col_shift ^= 4) {
 								FetchPushPixel(i);
 							}
 						}
 						else {
+							col_shift = (pixels_to_ignore_left & 1) ? 4 : 0;
 							for (int i = pixels_to_ignore_left; i < 8 - (int)pixels_to_ignore_right; ++i, col_shift ^= 4) {
 								FetchPushPixel(i);
 							}
@@ -952,70 +972,24 @@ namespace PPU
 						E.g., when displaying a 16x16 pixel OBJ with tile number 04h, the upper row of the OBJ will consist of tile 04h and 05h, the next row of 24h and 25h. (In 256 color mode: 04h and 06h, 24h and 26h.)
 						Char VRAM Mapping = 1: Tiles are mapped each after each other from 00h-3FFh. Using the same example as above, the upper row of the OBJ
 							will consist of tile 04h and 05h, the next row of tile 06h and 07h. (In 256 color mode: 04h and 06h, 08h and 0Ah.)*/
-					rel_tile_num = tile_offset_x + (char_vram_mapping == 0
-						? tile_offset_y * 32
-						: tile_offset_y * obj.size_x / 8);
+					const auto base_rel_tile_num = tile_offset_x + tile_offset_y * (char_vram_mapping == 0 ? 32 : obj.size_x / 8);
+					tile_data_addr_offset = 32 * (base_tile_num + base_rel_tile_num) + tile_row_size * tile_pixel_offset_y;
 					auto pixels_to_ignore_left = tile_pixel_offset_x;
 					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(num_dots));
 					FetchPushTile(pixels_to_ignore_left, pixels_to_ignore_right);
 					num_dots -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
 					for (int tile = 0; tile < num_dots / 8; ++tile) {
-						++rel_tile_num;
+						tile_data_addr_offset += tile_size;
 						FetchPushTile(0, 0);
 					}
 					if (num_dots % 8) {
-						++rel_tile_num;
+						tile_data_addr_offset += tile_size;
 						FetchPushTile(0, 8 - num_dots % 8);
 					}
-				}
-				else {
-					/* 8-bit depth (256 colors, 1 palette). Each tile occupies 64 bytes of memory, the first 8 bytes for the topmost row of the tile, etc..
-						Each byte selects the palette entry for each dot. */
+				};
 
-					/* When using the 256 Colors/1 Palette mode, only each second tile may be used, the lower bit
-						of the tile number should be zero (in 2-dimensional mapping mode, the bit is completely ignored). */
-					base_tile_num &= ~1;
-					const u32 base_tile_data_addr = vram_base_addr + (64 * base_tile_num + 8 * tile_pixel_offset_y) & vram_addr_mask;
-
-					auto FetchPushTile = [&](uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
-						u32 tile_data_addr = base_tile_data_addr + 64 * rel_tile_num;
-						auto FetchPushPixel = [&](uint pixel_index) {
-							u8 col_id = vram[tile_data_addr + pixel_index];
-							ObjColorData col;
-							std::memcpy(&col, palette_ram.data() + col_size * col_id, col_size);
-							col.transparent = col_id == 0;
-							col.obj_mode = obj.obj_mode;
-							col.priority = obj.priority;
-							obj_render[dot++] = col;
-						};
-						if (flip_x) {
-							for (int i = 7 - pixels_to_ignore_right; i >= (int)pixels_to_ignore_left; --i) {
-								FetchPushPixel(i);
-							}
-						}
-						else {
-							for (int i = pixels_to_ignore_left; i < 8 - (int)pixels_to_ignore_right; ++i) {
-								FetchPushPixel(i);
-							}
-						}
-					};
-
-					rel_tile_num = char_vram_mapping == 0
-						? tile_offset_x + tile_offset_y * 32
-						: tile_offset_x * 2 + tile_offset_y * obj.size_x / 8;
-					auto pixels_to_ignore_left = tile_pixel_offset_x;
-					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(num_dots));
-					FetchPushTile(pixels_to_ignore_left, pixels_to_ignore_right);
-					num_dots -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
-					for (int tile = 0; tile < num_dots / 8; ++tile) {
-						rel_tile_num += 2;
-						FetchPushTile(0, 0);
-					}
-					if (num_dots % 8) {
-						rel_tile_num += 2;
-						FetchPushTile(0, 8 - num_dots % 8);
-					}
-				}
+				if (obj.palette_mode == 0) RenderObject.template operator() < 0 > ();
+				else                       RenderObject.template operator() < 1 > ();
 			}
 		};
 
