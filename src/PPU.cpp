@@ -810,17 +810,12 @@ namespace PPU
 			bg_tile_index_x = (bg_tile_index_x + 1) & ((bg_width - 1) / 8);
 		};
 		/* The LCD being 240 pixels wide means 30 tiles to fetch if bghofs lands perfectly at the beginning of a tile. Else: 31 tiles. */
-		if (bghofs[bg] & 7) {
-			FetchPushTile(bghofs[bg] & 7, 0);
-			for (int i = 0; i < 29; ++i) {
-				FetchPushTile(0, 0);
-			}
-			FetchPushTile(0, 8 - (bghofs[bg] & 7));
+		FetchPushTile(bghofs[bg] & 7, 0);
+		for (int i = 0; i < 29; ++i) {
+			FetchPushTile(0, 0);
 		}
-		else {
-			for (int i = 0; i < 30; ++i) {
-				FetchPushTile(0, 0);
-			}
+		if (bghofs[bg] & 7) {
+			FetchPushTile(0, 8 - (bghofs[bg] & 7));
 		}
 	}
 
