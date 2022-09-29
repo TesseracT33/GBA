@@ -729,7 +729,7 @@ namespace PPU
 		constexpr static uint tile_size = 8;
 		constexpr static uint map_entry_size = 2;
 		const uint bg_width = 256 << (bgcnt[bg].screen_size & 1); /* 0 => 256; 1 => 512; 2 => 256; 3 = 512 */
-		const uint tile_map_addr_base = [&] { /* already takes into account which vertical tile we're on (it's constant), but not horizontal */
+		const uint base_tile_map_addr = [&] { /* already takes into account which vertical tile we're on (it's constant), but not horizontal */
 			constexpr static uint bytes_per_bg_map_area_row = 256 / tile_size * map_entry_size;
 			const uint bg_height = 256 << (bgcnt[bg].screen_size >> 1); /* 0 => 256; 1 => 256; 2 => 512; 3 => 512 */
 			const uint bg_tile_index_y = ((bgvofs[bg] + v_counter) & 255) / tile_size;
@@ -743,71 +743,76 @@ namespace PPU
 		const uint mosaic_incr = bgcnt[bg].mosaic_enable ? mosaic.bg_h_size + 1 : 1; /* TODO */
 		uint bg_tile_index_x = (bghofs[bg] & (bg_width - 1)) / tile_size; /* note: possibly 0-63, but masked to 0-31 when needed */
 		uint dot = 0;
+		uint base_tile_data_addr = bgcnt[bg].char_base_block * 0x4000;
 
-		auto FetchPushTile = [&](uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
-			uint tile_map_addr = tile_map_addr_base + map_entry_size * (bg_tile_index_x & 31);
-			if (bg_width == 512 && bg_tile_index_x > 31) {
-				tile_map_addr += 0x800; /* SC0/SC2 => SC1/SC3 */
-			}
-			/* VRAM BG Screen Data Format (BG Map)
-				0-9   Tile Number     (0-1023) (a bit less in 256 color mode, because there'd be otherwise no room for the bg map)
-				10    Horizontal Flip (0=Normal, 1=Mirrored)
-				11    Vertical Flip   (0=Normal, 1=Mirrored)
-				12-15 Palette Number  (0-15)    (Not used in 256 color/1 palette mode) */
-			constexpr static uint col_size = 2;
-			const uint tile_num = vram[tile_map_addr] | vram[tile_map_addr + 1] << 8 & 0x300;
-			const bool flip_x = vram[tile_map_addr + 1] & 4;
-			const bool flip_y = vram[tile_map_addr + 1] & 8;
-			const uint tile_offset_y = flip_y ? 7 - (v_counter + bgvofs[bg]) % 8 : (v_counter + bgvofs[bg]) % 8;
-			uint tile_data_addr = bgcnt[bg].char_base_block * 0x4000;
-			/* 4-bit depth (16 colors, 16 palettes). Each tile occupies 32 bytes of memory, the first 4 bytes for the topmost row of the tile, and so on.
-				Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot. */
-			if (bgcnt[bg].palette_mode == 0) {
-				tile_data_addr += 32 * tile_num + 4 * tile_offset_y;
-				u8 palette_num = vram[tile_map_addr + 1] >> 4;
-				const u8* palette_start_ptr = palette_ram.data() + 16 * col_size * palette_num;
-				uint col_shift = (pixels_to_ignore_left & 1) ? 4 : 0; /* access lower nibble of byte if tile pixel index is even, else higher nibble. */
+		auto FetchPushTile = [&] (uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
+			auto FetchPushTile = [&] <bool palette_mode> {
+				uint tile_map_addr = base_tile_map_addr + map_entry_size * (bg_tile_index_x & 31);
+				if (bg_width == 512 && bg_tile_index_x > 31) {
+					tile_map_addr += 0x800; /* SC0/SC2 => SC1/SC3 */
+				}
+				/* VRAM BG Screen Data Format (BG Map)
+					0-9   Tile Number     (0-1023) (a bit less in 256 color mode, because there'd be otherwise no room for the bg map)
+					10    Horizontal Flip (0=Normal, 1=Mirrored)
+					11    Vertical Flip   (0=Normal, 1=Mirrored)
+					12-15 Palette Number  (0-15)    (Not used in 256 color/1 palette mode) */
+				constexpr static uint col_size = 2;
+				uint tile_num = vram[tile_map_addr] | vram[tile_map_addr + 1] << 8 & 0x300;
+				const bool flip_x = vram[tile_map_addr + 1] & 4;
+				const bool flip_y = vram[tile_map_addr + 1] & 8;
+				uint tile_pixel_offset_y = (v_counter + bgvofs[bg]) % 8;
+				if (flip_y) {
+					tile_pixel_offset_y = 7 - tile_pixel_offset_y;
+				}
+				/* 4-bit depth (16 colors, 16 palettes): Each tile occupies 32 bytes of memory, the first 4 bytes for the topmost row of the tile, and so on.
+					Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot.
+					8-bit depth (256 colors, 1 palette): Each tile occupies 64 bytes of memory, the first 8 bytes for the topmost row of the tile, etc..
+					Each byte selects the palette entry for each dot. */
+				static constexpr uint tile_row_size = [&] {
+					if constexpr (palette_mode == 0) return 4;
+					else                             return 8;
+				}();
+				/* When using the 256 Colors/1 Palette mode, only each second tile may be used, the lower bit
+					of the tile number should be zero (in 2-dimensional mapping mode, the bit is completely ignored). */
+				if constexpr (palette_mode == 1) {
+					tile_num &= ~1;
+				}
+				u32 tile_data_addr_offset = 32 * tile_num + tile_row_size * tile_pixel_offset_y;
+				u32 tile_data_addr = base_tile_data_addr + (tile_data_addr_offset);
+				uint col_shift;
 				auto FetchPushPixel = [&](uint pixel_index) {
-					u8 col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
 					BgColorData col;
+					u8 col_id;
+					const u8* palette_start_ptr;
+					if constexpr (palette_mode == 0) {
+						col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
+						u8 palette_num = vram[tile_map_addr + 1] >> 4;
+						palette_start_ptr = palette_ram.data() + 16 * col_size * palette_num;
+					}
+					else {
+						col_id = vram[tile_data_addr + pixel_index];
+						palette_start_ptr = palette_ram.data();
+					}
 					std::memcpy(&col, palette_start_ptr + col_size * col_id, col_size);
 					col.transparent = col_id == 0;
 					bg_render[bg][dot++] = col;
 				};
 				if (flip_x) {
+					col_shift = (pixels_to_ignore_right & 1) ? 0 : 4; /* access lower nibble of byte if tile pixel index is even, else higher nibble. */
 					for (int i = 7 - pixels_to_ignore_right; i >= (int)pixels_to_ignore_left; --i, col_shift ^= 4) {
 						FetchPushPixel(i);
 					}
 				}
 				else {
+					col_shift = (pixels_to_ignore_left & 1) ? 4 : 0;
 					for (int i = pixels_to_ignore_left; i < 8 - (int)pixels_to_ignore_right; ++i, col_shift ^= 4) {
 						FetchPushPixel(i);
 					}
 				}
-			}
-			/* 8-bit depth (256 colors, 1 palette). Each tile occupies 64 bytes of memory, the first 8 bytes for the topmost row of the tile, etc..
-				Each byte selects the palette entry for each dot. */
-			else {
-				tile_data_addr += 64 * tile_num + 8 * tile_offset_y; /* TODO: tile_num can't be as high as 1023 in 256 col mode */
-				auto FetchPushPixel = [&](uint pixel_index) {
-					u8 col_id = vram[tile_data_addr + pixel_index];
-					BgColorData col;
-					std::memcpy(&col, palette_ram.data() + col_size * col_id, col_size);
-					col.transparent = col_id == 0;
-					bg_render[bg][dot++] = col;
-				};
-				if (flip_x) {
-					for (int i = 7 - pixels_to_ignore_right; i >= (int)pixels_to_ignore_left; --i) {
-						FetchPushPixel(i);
-					}
-				}
-				else {
-					for (int i = pixels_to_ignore_left; i < 8 - (int)pixels_to_ignore_right; ++i) {
-						FetchPushPixel(i);
-					}
-				}
-			}
-			bg_tile_index_x = (bg_tile_index_x + 1) & ((bg_width - 1) / 8);
+				bg_tile_index_x = (bg_tile_index_x + 1) & ((bg_width - 1) / 8);
+			};
+			if (bgcnt[bg].palette_mode == 0) FetchPushTile.template operator () < 0 > ();
+			else                             FetchPushTile.template operator () < 1 > ();
 		};
 		/* The LCD being 240 pixels wide means 30 tiles to fetch if bghofs lands perfectly at the beginning of a tile. Else: 31 tiles. */
 		FetchPushTile(bghofs[bg] & 7, 0);
