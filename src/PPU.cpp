@@ -795,7 +795,6 @@ namespace PPU
 
 	void ScanlineBackgroundBitmapMode5()
 	{
-		/* TODO: can objects be drawn around the background? Probably yes */
 		constexpr static uint col_size = 2;
 		constexpr static uint bytes_per_scanline = dots_per_line * col_size;
 		const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
@@ -824,20 +823,32 @@ namespace PPU
 		if (objects.empty()) {
 			return;
 		}
-		const bool char_vram_mapping = dispcnt.obj_char_vram_mapping; /* 0: 2D; 1: 1D */
+		const bool char_vram_mapping = dispcnt.obj_char_vram_mapping;
 		const uint vram_base_addr = dispcnt.bg_mode < 3 ? 0x10000 : 0x14000;
 		const uint vram_addr_mask = 0x17FFF - vram_base_addr;
 
 		auto RenderObject = [&](const ObjData& obj) {
 			if (!obj.rotate_scale) {
 				auto RenderObject = [&] <bool palette_mode> {
-					auto render_len = std::min((uint)obj.size_x, dots_per_line - obj.x_coord);
-					u8 dot = obj.x_coord;
+					u8 dot;
+					uint render_len, tile_offset_x, tile_pixel_offset_x;
+					if (obj.x_coord < dots_per_line) {
+						dot = obj.x_coord;
+						render_len = std::min((uint)obj.size_x, dots_per_line - obj.x_coord);
+						tile_offset_x = tile_pixel_offset_x = 0;
+					}
+					else if (obj.x_coord + obj.size_x > 512) { /* wrap around to x = 0 */
+						dot = 0;
+						render_len = obj.size_x - (512 - obj.x_coord);
+						tile_offset_x = (512 - obj.x_coord) / 8;
+						tile_pixel_offset_x = (512 - obj.x_coord) % 8;
+					}
+					else {
+						return;
+					}
 					const bool flip_x = obj.rot_scale_param & 8;
 					const bool flip_y = obj.rot_scale_param & 16;
-					const auto tile_offset_x = (dot - obj.x_coord) / 8;
 					const auto tile_offset_y = (v_counter - obj.y_coord) / 8;
-					const auto tile_pixel_offset_x = (dot - obj.x_coord) % 8;
 					auto tile_pixel_offset_y = (v_counter - obj.y_coord) % 8;
 					if (flip_y) {
 						tile_pixel_offset_y = 7 - tile_pixel_offset_y;
@@ -978,10 +989,6 @@ namespace PPU
 			if (y_coord > v_counter) {
 				continue;
 			}
-			u16 x_coord = oam[oam_addr + 2] | (oam[oam_addr + 3] & 1) << 8;
-			if (x_coord >= dots_per_line) {
-				continue;
-			}
 			u8 obj_shape = oam[oam_addr + 1] >> 6 & 3;
 			u8 obj_size = oam[oam_addr + 3] >> 6 & 3;
 			static constexpr u8 obj_height_table[4][4] = { /* OBJ Size (0-3) * OBJ Shape (0-2 (3 prohibited)) */
@@ -1004,11 +1011,6 @@ namespace PPU
 			std::memcpy(&obj_data, oam.data() + oam_addr, 6);
 			obj_data.size_x = obj_width_table[obj_size][obj_shape] << (double_size_obj_disable & rotate_scale);
 			obj_data.oam_index = oam_addr / 8;
-			/* Sort the objects so that the first object in the vector is the left-most object to be rendered on the current scanline.
-				If two objects have the same x-coordinates, the one with the smaller oam index has priority. */
-			//auto it = std::ranges::find_if(objects, [&](const ObjData& obj) {
-			//	return obj_data.x_coord < obj.x_coord;
-			//});
 			objects.push_back(obj_data);
 		}
 	}
