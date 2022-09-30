@@ -287,7 +287,6 @@ namespace CPU
 		auto rn = opcode >> 16 & 0xF;
 		bool set_conds = opcode >> 20 & 1;
 		bool reg_or_imm = opcode >> 25 & 1; /* 0 = register; 1 = immediate */
-
 		u32 op1 = r[rn];
 		if (rn == 15 && reg_or_imm == 0) {
 			op1 += 4;
@@ -771,20 +770,22 @@ namespace CPU
 	u32 Shift(u32 opcode, bool set_conds)
 	{
 		auto rm = opcode & 0xF;
-		auto shift_amount = [&] {
-			if (opcode & 0x10) { /* shift register */
-				auto rs = opcode >> 8 & 0xF;
-				return (r[rs] + (rs == 15 ? 4 : 0)) & 0xFF;
-			}
-			else { /* shift immediate */
-				return opcode >> 7 & 0x1F;
-			}
-		}();
 		auto oper = r[rm];
-		/* When the shift amount comes from a register and is 0, no shifting is done, and carry is unchanged.
-		   This is different from when the shift amount comes from an immediate (see below). */
-		if (shift_amount == 0 && (opcode & 0x10)) {
-			return oper + (rm == 15 ? 4 : 0);
+		u32 shift_amount;
+		if (opcode & 0x10) { /* shift register */
+			if (rm == 15) {
+				oper += 4;
+			}
+			auto rs = opcode >> 8 & 0xF;
+			shift_amount = r[rs] & 0xFF;
+			/* When the shift amount comes from a register and is 0, no shifting is done, and carry is unchanged.
+				This is different from when the shift amount comes from an immediate (see below). */
+			if (shift_amount == 0) {
+				return oper;
+			}
+		}
+		else { /* shift immediate */
+			shift_amount = opcode >> 7 & 0x1F;
 		}
 		auto shift_type = opcode >> 5 & 3;
 		switch (shift_type) {

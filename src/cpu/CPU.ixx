@@ -51,8 +51,6 @@ namespace CPU
 		ADC, AND, ASR, BIC, CMN, CMP, EOR, LSL, LSR, MUL, MVN, NEG, ORR, ROR, SBC, TST
 	};
 
-	using InstrHandler = void(*)(u32);
-
 	constexpr std::string_view ArmDataProcessingInstructionToStr(ArmDataProcessingInstruction instr);
 	bool CheckCondition(u32 cond);
 	void DecodeExecute(u32 opcode);
@@ -63,7 +61,6 @@ namespace CPU
 	void FlushPipeline();
 	template<Exception> ExceptionHandler GetExceptionHandler();
 	template<Exception> constexpr uint GetExceptionPriority();
-	u32 Shift(u32 opcode, bool set_conds = true);
 	void HandleDataAbortException();
 	void HandleFiqException();
 	void HandleIrqException();
@@ -89,6 +86,7 @@ namespace CPU
 	template<bool> void MSR(u32 opcode);
 	void Multiply(u32 opcode);
 	void MultiplyLong(u32 opcode);
+	u32 Shift(u32 opcode, bool set_conds = true);
 	void SingleDataSwap(u32 opcode);
 	void SingleDataTransfer(u32 opcode);
 
