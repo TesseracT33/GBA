@@ -309,7 +309,6 @@ namespace PPU
 		vram.fill(0);
 		objects.clear();
 		objects.reserve(128);
-		obj_render_jobs.clear();
 
 		framebuffer.resize(framebuffer_width * framebuffer_height * 3, 0);
 		Video::SetFramebufferPtr(framebuffer.data());
@@ -374,76 +373,6 @@ namespace PPU
 		}
 		else {
 			v_counter %= total_num_lines; /* cheaper than comparison on ly == total_num_lines to set ly = 0? */
-		}
-	}
-
-
-	void PrepareObjRenderJobs()
-	{
-		/* For each object, determine on which dots it should be rendered. */
-		obj_render_jobs.clear();
-		if (objects.empty()) {
-			return;
-		}
-		if (objects.size() == 1) {
-			auto obj_length = std::min((uint)objects[0].size_x, dots_per_line - objects[0].x_coord);
-			obj_render_jobs.emplace_back(0, u16(objects[0].x_coord), obj_length);
-			return;
-		}
-		u16 last_obj_end = 0;
-		std::stack<size_t> obj_stack{};
-		std::vector<u8> obj_handled{};
-		obj_handled.resize(objects.size(), false);
-		auto ScheduleEntireObj = [&](size_t& idx, u8 obj_start, u8 obj_end) {
-			obj_render_jobs.emplace_back(u8(idx), obj_start, obj_end - obj_start);
-			last_obj_end = obj_end;
-			obj_handled[idx] = true;
-			if (obj_stack.empty()) {
-				++idx;
-			}
-			else {
-				idx = obj_stack.top();
-				obj_stack.pop();
-			}
-		};
-		for (size_t i = 0; i < objects.size(); ) {
-			if (obj_handled[i]) {
-				++i;
-				continue;
-			}
-			ObjData& obj = objects[i];
-			u8 obj_start = std::max(obj.x_coord, last_obj_end) & 0xFF;
-			u8 obj_end = std::min(uint(obj.x_coord + obj.size_x), dots_per_line) & 0xFF;
-			if (obj_start >= obj_end) { /* object is fully occluded */
-				obj_handled[i++] = true;
-				continue;
-			}
-			size_t first_unhandled_obj = std::distance(obj_handled.begin(),
-				std::find(obj_handled.begin() + i + 1, obj_handled.end(), false));
-			if (first_unhandled_obj == objects.size() || obj_end <= objects[first_unhandled_obj].x_coord) { /* no collisions */
-				ScheduleEntireObj(i, obj_start, obj_end);
-			}
-			else { /* collision(s) */
-				bool higher_prio_colliding_obj_found = false;
-				for (size_t j = i + first_unhandled_obj; j < objects.size(); ++j) {
-					if (obj_end <= objects[j].x_coord) { /* reached the end of colliding objects; no colliding objects with higher prio found */
-						break;
-					}
-					if (obj.oam_index > objects[j].oam_index) { /* colliding object with higher prio found */
-						if (obj_start < objects[j].x_coord) {
-							obj_render_jobs.emplace_back(i, obj_start, objects[j].x_coord - obj_start);
-							last_obj_end = objects[j].x_coord;
-						}
-						obj_stack.emplace(i);
-						i = j;
-						higher_prio_colliding_obj_found = true;
-						break;
-					}
-				}
-				if (!higher_prio_colliding_obj_found) {
-					ScheduleEntireObj(i, obj_start, obj_end);
-				}
-			}
 		}
 	}
 
@@ -694,7 +623,6 @@ namespace PPU
 
 		if (dispcnt.screen_display_obj) {
 			ScanOam();
-			PrepareObjRenderJobs();
 			ScanlineObjects();
 		}
 		else {
@@ -892,32 +820,28 @@ namespace PPU
 
 	void ScanlineObjects()
 	{
+		obj_render.fill(transparent_obj_pixel);
 		if (objects.empty()) {
-			obj_render.fill(transparent_obj_pixel);
 			return;
 		}
-		static constexpr uint col_size = 2;
 		const bool char_vram_mapping = dispcnt.obj_char_vram_mapping; /* 0: 2D; 1: 1D */
 		const uint vram_base_addr = dispcnt.bg_mode < 3 ? 0x10000 : 0x14000;
 		const uint vram_addr_mask = 0x17FFF - vram_base_addr;
 
-		uint dot = 0;
-
-		auto RenderObject = [&](const ObjData& obj, u8 num_dots) {
+		auto RenderObject = [&](const ObjData& obj) {
 			if (!obj.rotate_scale) {
-				const bool flip_x = obj.rot_scale_param & 8;
-				const bool flip_y = obj.rot_scale_param & 16;
-				const auto tile_offset_x = (dot - obj.x_coord) / 8;
-				const auto tile_offset_y = (v_counter - obj.y_coord) / 8;
-				auto tile_pixel_offset_x = (dot - obj.x_coord) % 8;
-				auto tile_pixel_offset_y = (v_counter - obj.y_coord) % 8;
-				if (flip_x) {
-					tile_pixel_offset_x = 7 - tile_pixel_offset_x;
-				}
-				if (flip_y) {
-					tile_pixel_offset_y = 7 - tile_pixel_offset_y;
-				}
 				auto RenderObject = [&] <bool palette_mode> {
+					auto render_len = std::min((uint)obj.size_x, dots_per_line - obj.x_coord);
+					u8 dot = obj.x_coord;
+					const bool flip_x = obj.rot_scale_param & 8;
+					const bool flip_y = obj.rot_scale_param & 16;
+					const auto tile_offset_x = (dot - obj.x_coord) / 8;
+					const auto tile_offset_y = (v_counter - obj.y_coord) / 8;
+					const auto tile_pixel_offset_x = (dot - obj.x_coord) % 8;
+					auto tile_pixel_offset_y = (v_counter - obj.y_coord) % 8;
+					if (flip_y) {
+						tile_pixel_offset_y = 7 - tile_pixel_offset_y;
+					}
 					/* Palette Mode 0: 4-bit depth (16 colors, 16 palettes). Each tile occupies 32 bytes of memory, the first 4 bytes for the topmost row of the tile, and so on.
 						Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot. 
 						Palette Mode 1: 8-bit depth (256 colors, 1 palette). Each tile occupies 64 bytes of memory, the first 8 bytes for the topmost row of the tile, etc..
@@ -938,22 +862,27 @@ namespace PPU
 						u32 tile_data_addr = vram_base_addr + (tile_data_addr_offset & vram_addr_mask);
 						uint col_shift; 
 						auto FetchPushPixel = [&](uint pixel_index) {
-							ObjColorData col;
-							u8 col_id;
-							const u8* palette_start_ptr;
-							if constexpr (palette_mode == 0) {
-								col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF; 
-								palette_start_ptr = palette_ram.data() + 16 * col_size * obj.palette_num;
+							if (obj_render[dot].transparent) {
+								static constexpr uint col_size = 2;
+								ObjColorData col;
+								u8 col_id;
+								const u8* palette_start_ptr;
+								if constexpr (palette_mode == 0) {
+									col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
+									palette_start_ptr = palette_ram.data() + 16 * col_size * obj.palette_num;
+								}
+								else {
+									col_id = vram[tile_data_addr + pixel_index];
+									palette_start_ptr = palette_ram.data();
+								}
+
+								std::memcpy(&col, palette_start_ptr + col_size * col_id, col_size);
+								col.transparent = col_id == 0;
+								col.obj_mode = obj.obj_mode;
+								col.priority = obj.priority;
+								obj_render[dot] = col;
 							}
-							else {
-								col_id = vram[tile_data_addr + pixel_index];
-								palette_start_ptr = palette_ram.data();
-							}
-							std::memcpy(&col, palette_start_ptr + col_size * col_id, col_size);
-							col.transparent = col_id == 0;
-							col.obj_mode = obj.obj_mode;
-							col.priority = obj.priority;
-							obj_render[dot++] = col;
+							++dot;
 						};
 						if (flip_x) {
 							col_shift = (pixels_to_ignore_right & 1) ? 0 : 4; /* access lower nibble of byte if tile pixel index is even, else higher nibble. */
@@ -975,16 +904,16 @@ namespace PPU
 					const auto base_rel_tile_num = tile_offset_x + tile_offset_y * (char_vram_mapping == 0 ? 32 : obj.size_x / 8);
 					tile_data_addr_offset = 32 * (base_tile_num + base_rel_tile_num) + tile_row_size * tile_pixel_offset_y;
 					auto pixels_to_ignore_left = tile_pixel_offset_x;
-					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(num_dots));
+					auto pixels_to_ignore_right = std::max(0, 8 - int(tile_pixel_offset_x) - int(render_len));
 					FetchPushTile(pixels_to_ignore_left, pixels_to_ignore_right);
-					num_dots -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
-					for (int tile = 0; tile < num_dots / 8; ++tile) {
+					render_len -= 8 - pixels_to_ignore_left - pixels_to_ignore_right;
+					for (uint tile = 0; tile < render_len / 8; ++tile) {
 						tile_data_addr_offset += tile_size;
 						FetchPushTile(0, 0);
 					}
-					if (num_dots % 8) {
+					if (render_len % 8) {
 						tile_data_addr_offset += tile_size;
-						FetchPushTile(0, 8 - num_dots % 8);
+						FetchPushTile(0, 8 - render_len % 8);
 					}
 				};
 
@@ -993,15 +922,9 @@ namespace PPU
 			}
 		};
 
-		std::ranges::for_each(obj_render_jobs, [&](ObjRenderJob job) {
-			while (dot < job.dot_start) {
-				obj_render[dot++] = transparent_obj_pixel;
-			}
-			RenderObject(objects[job.obj_index], job.length);
+		std::ranges::for_each(objects, [&](const ObjData& obj) {
+			RenderObject(obj);
 		});
-		while (dot < dots_per_line) {
-			obj_render[dot++] = transparent_obj_pixel;
-		}
 	}
 
 
@@ -1083,10 +1006,10 @@ namespace PPU
 			obj_data.oam_index = oam_addr / 8;
 			/* Sort the objects so that the first object in the vector is the left-most object to be rendered on the current scanline.
 				If two objects have the same x-coordinates, the one with the smaller oam index has priority. */
-			auto it = std::ranges::find_if(objects, [&](const ObjData& obj) {
-				return obj_data.x_coord < obj.x_coord;
-			});
-			objects.insert(it, obj_data);
+			//auto it = std::ranges::find_if(objects, [&](const ObjData& obj) {
+			//	return obj_data.x_coord < obj.x_coord;
+			//});
+			objects.push_back(obj_data);
 		}
 	}
 
