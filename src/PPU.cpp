@@ -830,8 +830,7 @@ namespace PPU
 		auto RenderObject = [&](const ObjData& obj) {
 			if (!obj.rotate_scale) {
 				auto RenderObject = [&] <bool palette_mode> {
-					u8 dot;
-					uint render_len, tile_offset_x, tile_pixel_offset_x;
+					uint dot, render_len, tile_offset_x, tile_pixel_offset_x;
 					if (obj.x_coord < dots_per_line) {
 						dot = obj.x_coord;
 						render_len = std::min((uint)obj.size_x, dots_per_line - obj.x_coord);
@@ -875,18 +874,17 @@ namespace PPU
 						auto FetchPushPixel = [&](uint pixel_index) {
 							if (obj_render[dot].transparent) {
 								static constexpr uint col_size = 2;
+								static constexpr uint obj_palette_offset = 0x200;
 								ObjColorData col;
 								u8 col_id;
-								const u8* palette_start_ptr;
+								const u8* palette_start_ptr = palette_ram.data() + obj_palette_offset;
 								if constexpr (palette_mode == 0) {
 									col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
-									palette_start_ptr = palette_ram.data() + 16 * col_size * obj.palette_num;
+									palette_start_ptr += 16 * col_size * obj.palette_num;
 								}
 								else {
 									col_id = vram[tile_data_addr + pixel_index];
-									palette_start_ptr = palette_ram.data();
 								}
-
 								std::memcpy(&col, palette_start_ptr + col_size * col_id, col_size);
 								col.transparent = col_id == 0;
 								col.obj_mode = obj.obj_mode;
