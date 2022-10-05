@@ -12,6 +12,7 @@ import IRQ;
 import Keypad;
 import PPU;
 import Scheduler;
+import Serial;
 import Timers;
 import Util;
 
@@ -73,6 +74,7 @@ export struct GBA : Core
 		Keypad::Initialize();
 		PPU::Initialize();
 		Scheduler::Initialize();
+		Serial::Initialize();
 		Timers::Initialize();
 		if constexpr (Debug::LoggingIsEnabled()) {
 			Debug::SetLogPath("F:\\gba.log");

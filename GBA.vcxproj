@@ -200,6 +200,8 @@
     <ClCompile Include="src\PPU.ixx" />
     <ClCompile Include="src\Scheduler.cpp" />
     <ClCompile Include="src\Scheduler.ixx" />
+    <ClCompile Include="src\Serial.cpp" />
+    <ClCompile Include="src\Serial.ixx" />
     <ClCompile Include="src\Timers.cpp" />
     <ClCompile Include="src\Timers.ixx" />
   </ItemGroup>

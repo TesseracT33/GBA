@@ -9,6 +9,7 @@ import DMA;
 import Keypad;
 import IRQ;
 import PPU;
+import Serial;
 import Timers;
 
 namespace Bus
@@ -267,13 +268,13 @@ namespace Bus
 				return Timers::ReadReg<Int>(addr);
 			}
 			else if (addr < 0x400'0130) {
-				return Int(0); /* serial #1 */
+				return Serial::ReadReg<Int>(addr);
 			}
 			else if (addr < 0x400'0134) {
 				return Keypad::ReadReg<Int>(addr);
 			}
 			else if (addr < 0x400'0200) {
-				return Int(0); /* serial #2 */
+				return Serial::ReadReg<Int>(addr);
 			}
 			else {
 				auto ReadByte = [](u32 addr) {
@@ -431,13 +432,13 @@ namespace Bus
 			Timers::WriteReg(addr, data);
 		}
 		else if (addr < 0x400'0130) {
-			/* serial #1 */
+			Serial::WriteReg(addr, data);
 		}
 		else if (addr < 0x400'0134) {
 			Keypad::WriteReg(addr, data);
 		}
 		else if (addr < 0x400'0200) {
-			/* serial #2 */
+			Serial::WriteReg(addr, data);
 		}
 		else {
 			auto WriteByte = [](u32 addr, u8 data) {
