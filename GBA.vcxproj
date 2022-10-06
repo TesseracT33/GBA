@@ -150,6 +150,7 @@
     <ClCompile Include="external\EmuUtils\src\Misc.ixx" />
     <ClCompile Include="external\EmuUtils\src\NumericalTypes.ixx" />
     <ClCompile Include="external\EmuUtils\src\SerializationStream.ixx" />
+    <ClCompile Include="external\EmuUtils\src\Sets.ixx" />
     <ClCompile Include="external\EmuUtils\src\SSE.cpp" />
     <ClCompile Include="external\EmuUtils\src\SSE.ixx" />
     <ClCompile Include="external\EmuUtils\src\Util.ixx" />

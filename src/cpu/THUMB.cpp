@@ -272,8 +272,7 @@ namespace CPU
 	{
 		using enum ThumbAluInstruction;
 
-		static constexpr bool is_arithmetic_instr = instr == ADC || instr == CMN ||
-			instr == CMP || instr == NEG || instr == SBC;
+		static constexpr bool is_arithmetic_instr = OneOf(instr, ADC, CMN, CMP, NEG, SBC);
 
 		auto rd = opcode & 7;
 		auto rs = opcode >> 3 & 7;
@@ -386,7 +385,7 @@ namespace CPU
 			}
 		}();
 
-		if constexpr (instr != CMP && instr != CMN && instr != TST) {
+		if constexpr (!OneOf(instr, CMP, CMN, TST)) {
 			r[rd] = result;
 		}
 		cpsr.zero = result == 0;

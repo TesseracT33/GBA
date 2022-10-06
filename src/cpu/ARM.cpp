@@ -280,8 +280,7 @@ namespace CPU
 	{
 		using enum ArmDataProcessingInstruction;
 
-		static constexpr bool is_arithmetic_instr = instr == ADC || instr == ADD || instr == CMN ||
-			instr == CMP || instr == RSB || instr == RSC || instr == SBC || instr == SUB;
+		static constexpr bool is_arithmetic_instr = OneOf(instr, ADC, ADD, CMN, CMP, RSB, RSC, SBC, SUB);
 
 		auto rd = opcode >> 12 & 0xF;
 		auto rn = opcode >> 16 & 0xF;
@@ -325,7 +324,7 @@ namespace CPU
 			if constexpr (instr == SBC)                 return op1 - op2 + cpsr.carry - 1;
 		}();
 
-		if constexpr (instr != CMN && instr != CMP && instr != TEQ && instr != TST) {
+		if constexpr (!OneOf(instr, CMN, CMP, TEQ, TST)) {
 			r[rd] = result;
 			if (rd == 15) {
 				FlushPipeline();
@@ -354,9 +353,9 @@ namespace CPU
 				cpsr.negative = GetBit(result, 31);
 				if constexpr (is_arithmetic_instr) {
 					auto cond = [&] {
-						if constexpr (instr == ADC || instr == ADD || instr == CMN) return (op1 ^ result) & (op2 ^ result);
-						if constexpr (instr == CMP || instr == SBC || instr == SUB) return (op1 ^ op2) & (op1 ^ result);
-						if constexpr (instr == RSB || instr == RSC)                 return (op1 ^ op2) & (op2 ^ result);
+						if constexpr (OneOf(instr, ADC, ADD, CMN)) return (op1 ^ result) & (op2 ^ result);
+						if constexpr (OneOf(instr, CMP, SBC, SUB)) return (op1 ^ op2) & (op1 ^ result);
+						if constexpr (OneOf(instr, RSB, RSC))      return (op1 ^ op2) & (op2 ^ result);
 					}();
 					cpsr.overflow = GetBit(cond, 31);
 				}
