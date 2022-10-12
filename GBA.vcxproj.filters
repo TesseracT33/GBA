@@ -23,10 +23,10 @@
     <None Include=".gitmodules" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\PPU.ixx">
+    <ClCompile Include="src\ppu\PPU.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\PPU.cpp">
+    <ClCompile Include="src\ppu\PPU.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\GBA.ixx">
@@ -207,6 +207,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="external\EmuUtils\src\Sets.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ppu\Interface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ppu\Rendering.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

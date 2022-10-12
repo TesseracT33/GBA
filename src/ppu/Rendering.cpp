@@ -1,19 +1,7 @@
 module PPU;
 
-import Bus;
-import DMA;
-import IRQ;
-import Scheduler;
-import Video;
-
 namespace PPU
 {
-	void AddInitialEvents()
-	{
-		Scheduler::AddEvent(Scheduler::EventType::HBlank, cycles_until_hblank, OnHBlank);
-	}
-
-
 	RGB AlphaBlend(RGB target_1, RGB target_2)
 	{
 		return {
@@ -55,7 +43,7 @@ namespace PPU
 					return GetBit(winout.outside_bg_enable, bg);
 				}
 				return true;
-			});
+				});
 			return it != bg_by_prio.end() ? *it : 4;
 		};
 
@@ -272,111 +260,6 @@ namespace PPU
 	}
 
 
-	void Initialize()
-	{
-		std::memset(&dispcnt, 0, sizeof(dispcnt));
-		std::memset(&green_swap, 0, sizeof(green_swap));
-		std::memset(&dispstat, 0, sizeof(dispstat));
-		std::memset(&v_counter, 0, sizeof(v_counter));
-		for (int i = 0; i < 4; ++i) {
-			std::memset(&bgcnt[i], 0, sizeof(bgcnt[i]));
-			std::memset(&bghofs[i], 0, sizeof(bghofs[i]));
-			std::memset(&bgvofs[i], 0, sizeof(bgvofs[i]));
-		}
-		for (int i = 0; i < 2; ++i) {
-			std::memset(&bgpa[i], 0, sizeof(bgpa[i]));
-			std::memset(&bgpb[i], 0, sizeof(bgpb[i]));
-			std::memset(&bgpc[i], 0, sizeof(bgpc[i]));
-			std::memset(&bgpd[i], 0, sizeof(bgpd[i]));
-			std::memset(&bgx[i], 0, sizeof(bgx[i]));
-			std::memset(&bgy[i], 0, sizeof(bgy[i]));
-			std::memset(&winh_x1[i], 0, sizeof(winh_x1[i]));
-			std::memset(&winh_x2[i], 0, sizeof(winh_x2[i]));
-			std::memset(&winv_y1[i], 0, sizeof(winv_y1[i]));
-			std::memset(&winv_y2[i], 0, sizeof(winv_y2[i]));
-		}
-		std::memset(&winin, 0, sizeof(winin));
-		std::memset(&winout, 0, sizeof(winout));
-		std::memset(&mosaic, 0, sizeof(mosaic));
-		std::memset(&bldcnt, 0, sizeof(bldcnt));
-		std::memset(&eva, 0, sizeof(eva));
-		std::memset(&evb, 0, sizeof(evb));
-		std::memset(&evy, 0, sizeof(evy));
-		in_hblank = in_vblank = false;
-		cycle = dot = framebuffer_index = 0;
-		oam.fill(0);
-		palette_ram.fill(0);
-		vram.fill(0);
-		objects.clear();
-		objects.reserve(128);
-
-		framebuffer.resize(framebuffer_width * framebuffer_height * 3, 0);
-		Video::SetFramebufferPtr(framebuffer.data());
-		Video::SetFramebufferSize(framebuffer_width, framebuffer_height);
-		Video::SetPixelFormat(Video::PixelFormat::RGB888);
-	}
-
-
-	void OnHBlank()
-	{
-		Scheduler::AddEvent(Scheduler::EventType::HBlankSetFlag, cycles_until_set_hblank_flag - cycles_until_hblank, OnHBlankSetFlag);
-		in_hblank = true;
-		DMA::OnHBlank();
-	}
-
-
-	void OnHBlankSetFlag()
-	{
-		Scheduler::AddEvent(Scheduler::EventType::NewScanline, cycles_per_line - cycles_until_set_hblank_flag, OnNewScanline);
-		dispstat.hblank = 1;
-		if (dispstat.hblank_irq_enable) { /* TODO: here or in OnHBlank? */
-			IRQ::Raise(IRQ::Source::HBlank);
-		}
-	}
-	
-
-	void OnNewScanline()
-	{
-		if (v_counter < lines_until_vblank) {
-			RenderScanline();
-		}
-		Scheduler::AddEvent(Scheduler::EventType::HBlank, cycles_until_hblank, OnHBlank);
-		dispstat.hblank = in_hblank = false;
-		++v_counter;
-		if (dispstat.v_counter_irq_enable) {
-			bool prev_v_counter_match = dispstat.v_counter_match;
-			dispstat.v_counter_match = v_counter == dispstat.v_count_setting;
-			if (dispstat.v_counter_match && !prev_v_counter_match) {
-				IRQ::Raise(IRQ::Source::VCounter);
-			}
-		}
-		else {
-			dispstat.v_counter_match = v_counter == dispstat.v_count_setting;
-		}
-		if (v_counter < lines_until_vblank) {
-			UpdateRotateScalingRegisters();
-		}
-		else if (v_counter == lines_until_vblank) {
-			framebuffer_index = 0;
-			Video::NotifyNewGameFrameReady();
-			dispstat.vblank = in_vblank = true;
-			if (dispstat.vblank_irq_enable) {
-				IRQ::Raise(IRQ::Source::VBlank);
-			}
-			DMA::OnVBlank();
-		}
-		else if (v_counter == total_num_lines - 1) {
-			dispstat.vblank = 0; /* not set in the last line */
-			in_vblank = false;
-			//bg_rot_coord_x = 0x0FFF'FFFF & std::bit_cast<u64>(bgx);
-			//bg_rot_coord_y = 0x0FFF'FFFF & std::bit_cast<u64>(bgy);
-		}
-		else {
-			v_counter %= total_num_lines; /* cheaper than comparison on ly == total_num_lines to set ly = 0? */
-		}
-	}
-
-
 	void PushPixel(auto color_data)
 	{
 		if (color_data.transparent) {
@@ -404,113 +287,6 @@ namespace PPU
 		framebuffer[framebuffer_index++] = r;
 		framebuffer[framebuffer_index++] = g;
 		framebuffer[framebuffer_index++] = b;
-	}
-
-
-	template<std::integral Int>
-	Int ReadOam(u32 addr)
-	{
-		if (dispcnt.forced_blank || in_vblank || in_hblank && dispcnt.hblank_interval_free) {
-			Int ret;
-			std::memcpy(&ret, oam.data() + (addr & 0x3FF), sizeof(Int));
-			return ret;
-		}
-		else {
-			return Int(-1);
-		}
-	}
-
-
-	template<std::integral Int>
-	Int ReadPaletteRam(u32 addr)
-	{
-		if (dispcnt.forced_blank || in_vblank || in_hblank) {
-			Int ret;
-			std::memcpy(&ret, palette_ram.data() + (addr & 0x3FF), sizeof(Int));
-			return ret;
-		}
-		else {
-			return Int(-1);
-		}
-	}
-
-
-	template<std::integral Int>
-	Int ReadReg(u32 addr)
-	{
-		auto ReadByte = [](u32 addr) {
-			switch (addr) {
-			case Bus::ADDR_DISPCNT:        return GetByte(dispcnt, 0);
-			case Bus::ADDR_DISPCNT + 1:    return GetByte(dispcnt, 1);
-			case Bus::ADDR_GREEN_SWAP:     return u8(green_swap);
-			case Bus::ADDR_GREEN_SWAP + 1: return u8(0);
-			case Bus::ADDR_DISPSTAT:       return GetByte(dispstat, 0);
-			case Bus::ADDR_DISPSTAT + 1:   return GetByte(dispstat, 1);
-			case Bus::ADDR_VCOUNT:         return v_counter;
-			case Bus::ADDR_VCOUNT + 1:     return u8(0);
-			case Bus::ADDR_BG0CNT:         return GetByte(bgcnt[0], 0);
-			case Bus::ADDR_BG0CNT + 1:     return GetByte(bgcnt[0], 1);
-			case Bus::ADDR_BG1CNT:         return GetByte(bgcnt[1], 0);
-			case Bus::ADDR_BG1CNT + 1:     return GetByte(bgcnt[1], 1);
-			case Bus::ADDR_BG2CNT:         return GetByte(bgcnt[2], 0);
-			case Bus::ADDR_BG2CNT + 1:     return GetByte(bgcnt[2], 1);
-			case Bus::ADDR_BG3CNT:         return GetByte(bgcnt[3], 0);
-			case Bus::ADDR_BG3CNT + 1:     return GetByte(bgcnt[3], 1);
-			case Bus::ADDR_WININ:          return GetByte(winin, 0);
-			case Bus::ADDR_WININ + 1:      return GetByte(winin, 1);
-			case Bus::ADDR_WINOUT:         return GetByte(winout, 0);
-			case Bus::ADDR_WINOUT + 1:     return GetByte(winout, 1);
-			case Bus::ADDR_BLDCNT:         return GetByte(bldcnt, 0);
-			case Bus::ADDR_BLDCNT + 1:     return GetByte(bldcnt, 1);
-			case Bus::ADDR_BLDALPHA:       return eva;
-			case Bus::ADDR_BLDALPHA + 1:   return evb;
-			default:                       return Bus::ReadOpenBus<u8>(addr);
-			}
-		};
-
-		auto ReadHalf = [](u32 addr) {
-			switch (addr) {
-			case Bus::ADDR_DISPCNT:    return std::bit_cast<u16>(dispcnt);
-			case Bus::ADDR_GREEN_SWAP: return u16(green_swap);
-			case Bus::ADDR_DISPSTAT:   return std::bit_cast<u16>(dispstat);
-			case Bus::ADDR_VCOUNT:     return u16(v_counter);
-			case Bus::ADDR_BG0CNT:     return std::bit_cast<u16>(bgcnt[0]);
-			case Bus::ADDR_BG1CNT:     return std::bit_cast<u16>(bgcnt[1]);
-			case Bus::ADDR_BG2CNT:     return std::bit_cast<u16>(bgcnt[2]);
-			case Bus::ADDR_BG3CNT:     return std::bit_cast<u16>(bgcnt[3]);
-			case Bus::ADDR_WININ:      return std::bit_cast<u16>(winin);
-			case Bus::ADDR_WINOUT:     return std::bit_cast<u16>(winout);
-			case Bus::ADDR_BLDCNT:     return std::bit_cast<u16>(bldcnt);
-			case Bus::ADDR_BLDALPHA:   return u16(eva | evb << 8);
-			default:                   return Bus::ReadOpenBus<u16>(addr);
-			}
-		};
-
-		if constexpr (sizeof(Int) == 1) {
-			return ReadByte(addr);
-		}
-		if constexpr (sizeof(Int) == 2) {
-			return ReadHalf(addr);
-		}
-		if constexpr (sizeof(Int) == 4) {
-			u16 lo = ReadHalf(addr);
-			u16 hi = ReadHalf(addr + 2);
-			return lo | hi << 16;
-		}
-	}
-
-
-	template<std::integral Int>
-	Int ReadVram(u32 addr)
-	{
-		if (dispcnt.forced_blank || in_vblank || in_hblank) {
-			Int ret;
-			std::memcpy(&ret, vram.data() + (addr % 0x18000), sizeof(Int));
-			return ret;
-		}
-		else {
-			return Int(-1);
-		}
 	}
 
 
@@ -633,6 +409,14 @@ namespace PPU
 	}
 
 
+	void RenderTransparentBackground(uint bg)
+	{
+		for (uint dot = 0; dot < dots_per_line; ++dot) {
+			bg_render[bg][dot] = transparent_bg_pixel;
+		}
+	}
+
+
 	RGB Rgb555ToRgb888(RGB rgb)
 	{
 		/* Convert each 5-bit channel to 8-bit channels (https://github.com/mattcurrie/dmg-acid2) */
@@ -641,14 +425,6 @@ namespace PPU
 			.g = u8(rgb.g << 3 | rgb.g >> 2),
 			.b = u8(rgb.b << 3 | rgb.b >> 2)
 		};
-	}
-
-
-	void RenderTransparentBackground(uint bg)
-	{
-		for (uint dot = 0; dot < dots_per_line; ++dot) {
-			bg_render[bg][dot] = transparent_bg_pixel;
-		}
 	}
 
 
@@ -743,18 +519,18 @@ namespace PPU
 #define FETCH_PUSH_TILE FetchPushTile.template operator ()
 			/* The LCD being 240 pixels wide means 30 tiles to fetch if bghofs lands perfectly at the beginning of a tile. Else: 31 tiles. */
 			auto offset = bghofs[bg] & 7;
-			FETCH_PUSH_TILE < palette_mode > (offset, 0);
+			FETCH_PUSH_TILE < palette_mode >(offset, 0);
 			for (int i = 0; i < 29; ++i) {
-				FETCH_PUSH_TILE < palette_mode > (0, 0);
+				FETCH_PUSH_TILE < palette_mode >(0, 0);
 			}
 			if (offset > 0) {
-				FETCH_PUSH_TILE < palette_mode > (0, 8 - offset);
+				FETCH_PUSH_TILE < palette_mode >(0, 8 - offset);
 			}
 #undef FETCH_PUSH_TILE
 		};
 
-		if (bgcnt[bg].palette_mode == 0) Render.template operator() <0> ();
-		else                             Render.template operator() <1> ();
+		if (bgcnt[bg].palette_mode == 0) Render.template operator() < 0 > ();
+		else                             Render.template operator() < 1 > ();
 	}
 
 
@@ -858,7 +634,7 @@ namespace PPU
 						tile_pixel_offset_y = 7 - tile_pixel_offset_y;
 					}
 					/* Palette Mode 0: 4-bit depth (16 colors, 16 palettes). Each tile occupies 32 bytes of memory, the first 4 bytes for the topmost row of the tile, and so on.
-						Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot. 
+						Each byte representing two dots, the lower 4 bits define the color for the left dot, the upper 4 bits the color for the right dot.
 						Palette Mode 1: 8-bit depth (256 colors, 1 palette). Each tile occupies 64 bytes of memory, the first 8 bytes for the topmost row of the tile, etc..
 						Each byte selects the palette entry for each dot. */
 					static constexpr uint tile_size = [&] {
@@ -875,7 +651,7 @@ namespace PPU
 					u32 tile_data_addr_offset;
 					auto FetchPushTile = [&](uint pixels_to_ignore_left, uint pixels_to_ignore_right) {
 						u32 tile_data_addr = vram_base_addr + (tile_data_addr_offset & vram_addr_mask);
-						uint col_shift; 
+						uint col_shift;
 						auto FetchPushPixel = [&](uint pixel_index) {
 							if (obj_render[dot].transparent) {
 								static constexpr uint col_size = 2;
@@ -938,7 +714,7 @@ namespace PPU
 
 		std::ranges::for_each(objects, [&](const ObjData& obj) {
 			RenderObject(obj);
-		});
+			});
 	}
 
 
@@ -1032,249 +808,4 @@ namespace PPU
 			}
 		}
 	}
-
-
-	void StreamState(SerializationStream& stream)
-	{
-
-	}
-
-
-	void UpdateRotateScalingRegisters()
-	{
-		//s16 dmx = 0;
-		//bg_rot_coord_x = (bg_rot_coord_x + dmx) & 0x0FFF'FFF;
-		//s16 dmy = 0;
-		//bg_rot_coord_y = (bg_rot_coord_y + dmy) & 0x0FFF'FFF;
-	}
-
-
-	template<std::integral Int>
-	void WriteOam(u32 addr, Int data)
-	{
-		std::memcpy(oam.data() + (addr & 0x3FF), &data, sizeof(Int));
-		//if (dispcnt.forced_blank || in_vblank || in_hblank && dispcnt.hblank_interval_free) {
-		//	std::memcpy(oam.data() + (addr & 0x3FF), &data, sizeof(Int));
-		//}
-	}
-
-
-	template<std::integral Int>
-	void WritePaletteRam(u32 addr, Int data)
-	{
-		std::memcpy(palette_ram.data() + (addr & 0x3FF), &data, sizeof(Int));
-		//if (dispcnt.forced_blank || in_vblank || in_hblank) {
-		//	std::memcpy(palette_ram.data() + (addr & 0x3FF), &data, sizeof(Int));
-		//}
-	}
-
-
-	template<std::integral Int>
-	void WriteReg(u32 addr, Int data)
-	{
-		auto WriteByte = [](u32 addr, u8 data) {
-			switch (addr) {
-			case Bus::ADDR_DISPCNT:      SetByte(dispcnt, 0, data); break;
-			case Bus::ADDR_DISPCNT + 1:  SetByte(dispcnt, 1, data); break;
-			case Bus::ADDR_GREEN_SWAP:   green_swap = data & 1; break;
-			case Bus::ADDR_DISPSTAT:     SetByte(dispstat, 0, data); break;
-			case Bus::ADDR_DISPSTAT + 1: SetByte(dispstat, 1, data); break;
-			case Bus::ADDR_BG0CNT:       SetByte(bgcnt[0], 0, data); SortBackgroundsAfterPriority(); break;
-			case Bus::ADDR_BG0CNT + 1:   SetByte(bgcnt[0], 1, data); break;
-			case Bus::ADDR_BG1CNT:       SetByte(bgcnt[1], 0, data); SortBackgroundsAfterPriority(); break;
-			case Bus::ADDR_BG1CNT + 1:   SetByte(bgcnt[1], 1, data); break;
-			case Bus::ADDR_BG2CNT:       SetByte(bgcnt[2], 0, data); SortBackgroundsAfterPriority(); break;
-			case Bus::ADDR_BG2CNT + 1:   SetByte(bgcnt[2], 1, data); break;
-			case Bus::ADDR_BG3CNT:       SetByte(bgcnt[3], 0, data); SortBackgroundsAfterPriority(); break;
-			case Bus::ADDR_BG3CNT + 1:   SetByte(bgcnt[3], 1, data); break;
-			case Bus::ADDR_BG0HOFS:      SetByte(bghofs[0], 0, data); break;
-			case Bus::ADDR_BG0HOFS + 1:  SetByte(bghofs[0], 1, data & 1); break;
-			case Bus::ADDR_BG0VOFS:      SetByte(bgvofs[0], 0, data); break;
-			case Bus::ADDR_BG0VOFS + 1:  SetByte(bgvofs[0], 1, data & 1); break;
-			case Bus::ADDR_BG1HOFS:      SetByte(bghofs[1], 0, data); break;
-			case Bus::ADDR_BG1HOFS + 1:  SetByte(bghofs[1], 1, data & 1); break;
-			case Bus::ADDR_BG1VOFS:      SetByte(bgvofs[1], 0, data); break;
-			case Bus::ADDR_BG1VOFS + 1:  SetByte(bgvofs[1], 1, data & 1); break;
-			case Bus::ADDR_BG2HOFS:      SetByte(bghofs[2], 0, data); break;
-			case Bus::ADDR_BG2HOFS + 1:  SetByte(bghofs[2], 1, data & 1); break;
-			case Bus::ADDR_BG2VOFS:      SetByte(bgvofs[2], 0, data); break;
-			case Bus::ADDR_BG2VOFS + 1:  SetByte(bgvofs[2], 1, data & 1); break;
-			case Bus::ADDR_BG3HOFS:      SetByte(bghofs[3], 0, data); break;
-			case Bus::ADDR_BG3HOFS + 1:  SetByte(bghofs[3], 1, data & 1); break;
-			case Bus::ADDR_BG3VOFS:      SetByte(bgvofs[3], 0, data); break;
-			case Bus::ADDR_BG3VOFS + 1:  SetByte(bgvofs[3], 1, data & 1); break;
-			case Bus::ADDR_BG2PA:        SetByte(bgpa[0], 0, data); break;
-			case Bus::ADDR_BG2PA + 1:    SetByte(bgpa[0], 1, data); break;
-			case Bus::ADDR_BG2PB:        SetByte(bgpb[0], 0, data); break;
-			case Bus::ADDR_BG2PB + 1:    SetByte(bgpb[0], 1, data); break;
-			case Bus::ADDR_BG2PC:        SetByte(bgpc[0], 0, data); break;
-			case Bus::ADDR_BG2PC + 1:    SetByte(bgpc[0], 1, data); break;
-			case Bus::ADDR_BG2PD:        SetByte(bgpd[0], 0, data); break;
-			case Bus::ADDR_BG2PD + 1:    SetByte(bgpd[0], 1, data); break;
-			case Bus::ADDR_BG2X:         SetByte(bgx[0], 0, data); break;
-			case Bus::ADDR_BG2X + 1:     SetByte(bgx[0], 1, data); break;
-			case Bus::ADDR_BG2X + 2:     SetByte(bgx[0], 2, data); break;
-			case Bus::ADDR_BG2X + 3:     SetByte(bgx[0], 3, data); break;
-			case Bus::ADDR_BG2Y:         SetByte(bgy[0], 0, data); break;
-			case Bus::ADDR_BG2Y + 1:     SetByte(bgy[0], 1, data); break;
-			case Bus::ADDR_BG2Y + 2:     SetByte(bgy[0], 2, data); break;
-			case Bus::ADDR_BG2Y + 3:     SetByte(bgy[0], 3, data); break;
-			case Bus::ADDR_BG3PA:        SetByte(bgpa[1], 0, data); break;
-			case Bus::ADDR_BG3PA + 1:    SetByte(bgpa[1], 1, data); break;
-			case Bus::ADDR_BG3PB:        SetByte(bgpb[1], 0, data); break;
-			case Bus::ADDR_BG3PB + 1:    SetByte(bgpb[1], 1, data); break;
-			case Bus::ADDR_BG3PC:        SetByte(bgpc[1], 0, data); break;
-			case Bus::ADDR_BG3PC + 1:    SetByte(bgpc[1], 1, data); break;
-			case Bus::ADDR_BG3PD:        SetByte(bgpd[1], 0, data); break;
-			case Bus::ADDR_BG3PD + 1:    SetByte(bgpd[1], 1, data); break;
-			case Bus::ADDR_BG3X:         SetByte(bgx[1], 0, data); break;
-			case Bus::ADDR_BG3X + 1:     SetByte(bgx[1], 1, data); break;
-			case Bus::ADDR_BG3X + 2:     SetByte(bgx[1], 2, data); break;
-			case Bus::ADDR_BG3X + 3:     SetByte(bgx[1], 3, data); break;
-			case Bus::ADDR_BG3Y:         SetByte(bgy[1], 0, data); break;
-			case Bus::ADDR_BG3Y + 1:     SetByte(bgy[1], 1, data); break;
-			case Bus::ADDR_BG3Y + 2:     SetByte(bgy[1], 2, data); break;
-			case Bus::ADDR_BG3Y + 3:     SetByte(bgy[1], 3, data); break;
-			case Bus::ADDR_WIN0H:        winh_x2[0] = data; break;
-			case Bus::ADDR_WIN0H + 1:    winh_x1[0] = data; break;
-			case Bus::ADDR_WIN1H:        winh_x2[1] = data; break;
-			case Bus::ADDR_WIN1H + 1:    winh_x1[1] = data; break;
-			case Bus::ADDR_WIN0V:        winv_y2[0] = data; break;
-			case Bus::ADDR_WIN0V + 1:    winv_y1[0] = data; break;
-			case Bus::ADDR_WIN1V:        winv_y2[1] = data; break;
-			case Bus::ADDR_WIN1V + 1:    winv_y1[1] = data; break;
-			case Bus::ADDR_WININ:        SetByte(winin, 0, data); break;
-			case Bus::ADDR_WININ + 1:    SetByte(winin, 1, data); break;
-			case Bus::ADDR_WINOUT:       SetByte(winout, 0, data); break;
-			case Bus::ADDR_WINOUT + 1:   SetByte(winout, 1, data); break;
-			case Bus::ADDR_MOSAIC:       SetByte(mosaic, 0, data); break;
-			case Bus::ADDR_MOSAIC + 1:   SetByte(mosaic, 1, data); break;
-			case Bus::ADDR_BLDCNT:       SetByte(bldcnt, 0, data); break;
-			case Bus::ADDR_BLDCNT + 1:   SetByte(bldcnt, 1, data); break;
-			case Bus::ADDR_BLDALPHA:     eva = data & 0x1F; break;
-			case Bus::ADDR_BLDALPHA + 1: evb = data & 0x1F; break;
-			case Bus::ADDR_BLDY:         evy = data & 0x1F; break;
-			}
-		};
-
-		auto WriteHalf = [](u32 addr, u16 data) {
-			switch (addr) {
-			case Bus::ADDR_DISPCNT:    dispcnt = std::bit_cast<DISPCNT>(data); break;
-			case Bus::ADDR_GREEN_SWAP: green_swap = data & 1; break;
-			case Bus::ADDR_DISPSTAT:   dispstat = std::bit_cast<DISPSTAT>(data); break;
-			case Bus::ADDR_BG0CNT:     bgcnt[0] = std::bit_cast<BGCNT>(data); SortBackgroundsAfterPriority(); break;
-			case Bus::ADDR_BG1CNT:     bgcnt[1] = std::bit_cast<BGCNT>(data); SortBackgroundsAfterPriority(); break;
-			case Bus::ADDR_BG2CNT:     bgcnt[2] = std::bit_cast<BGCNT>(data); SortBackgroundsAfterPriority(); break;
-			case Bus::ADDR_BG3CNT:     bgcnt[3] = std::bit_cast<BGCNT>(data); SortBackgroundsAfterPriority(); break;
-			case Bus::ADDR_BG0HOFS:    bghofs[0] = data & 0x1FF; break;
-			case Bus::ADDR_BG0VOFS:    bgvofs[0] = data & 0x1FF; break;
-			case Bus::ADDR_BG1HOFS:    bghofs[1] = data & 0x1FF; break;
-			case Bus::ADDR_BG1VOFS:    bgvofs[1] = data & 0x1FF; break;
-			case Bus::ADDR_BG2HOFS:    bghofs[2] = data & 0x1FF; break;
-			case Bus::ADDR_BG2VOFS:    bgvofs[2] = data & 0x1FF; break;
-			case Bus::ADDR_BG3HOFS:    bghofs[3] = data & 0x1FF; break;
-			case Bus::ADDR_BG3VOFS:    bgvofs[3] = data & 0x1FF; break;
-			case Bus::ADDR_BG2PA:      bgpa[0] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG2PB:      bgpb[0] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG2PC:      bgpc[0] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG2PD:      bgpd[0] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG2X:       SetByte(bgx[0], 0, data & 0xFF); SetByte(bgx[0], 1, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG2X + 2:   SetByte(bgx[0], 2, data & 0xFF); SetByte(bgx[0], 3, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG2Y:       SetByte(bgy[0], 0, data & 0xFF); SetByte(bgy[0], 1, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG2Y + 2:   SetByte(bgy[0], 2, data & 0xFF); SetByte(bgy[0], 3, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG3PA:      bgpa[1] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG3PB:      bgpb[1] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG3PC:      bgpc[1] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG3PD:      bgpd[1] = std::bit_cast<BGP>(data); break;
-			case Bus::ADDR_BG3X:       SetByte(bgx[1], 0, data & 0xFF); SetByte(bgx[1], 1, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG3X + 2:   SetByte(bgx[1], 2, data & 0xFF); SetByte(bgx[1], 3, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG3Y:       SetByte(bgy[1], 0, data & 0xFF); SetByte(bgy[1], 1, data >> 8 & 0xFF); break;
-			case Bus::ADDR_BG3Y + 2:   SetByte(bgy[1], 2, data & 0xFF); SetByte(bgy[1], 3, data >> 8 & 0xFF); break;
-			case Bus::ADDR_WIN0H:      winh_x2[0] = data & 0xFF; winh_x1[0] = data >> 8 & 0xFF; break;
-			case Bus::ADDR_WIN1H:      winh_x2[1] = data & 0xFF; winh_x1[1] = data >> 8 & 0xFF; break;
-			case Bus::ADDR_WIN0V:      winv_y2[0] = data & 0xFF; winv_y1[0] = data >> 8 & 0xFF; break;
-			case Bus::ADDR_WIN1V:      winv_y2[1] = data & 0xFF; winv_y1[1] = data >> 8 & 0xFF; break;
-			case Bus::ADDR_WININ:      winin = std::bit_cast<WININ>(data); break;
-			case Bus::ADDR_WINOUT:     winout = std::bit_cast<WINOUT>(data); break;
-			case Bus::ADDR_MOSAIC:     mosaic = std::bit_cast<MOSAIC>(data); break;
-			case Bus::ADDR_BLDCNT:     bldcnt = std::bit_cast<BLDCNT>(data); break;
-			case Bus::ADDR_BLDALPHA:   eva = data & 0x1F; evb = data >> 8 & 0x1F; break;
-			case Bus::ADDR_BLDY:       evy = data & 0x1F; break;
-			}
-		};
-
-		if constexpr (sizeof(Int) == 1) {
-			WriteByte(addr, data);
-		}
-		if constexpr (sizeof(Int) == 2) {
-			WriteHalf(addr, data);
-		}
-		if constexpr (sizeof(Int) == 4) {
-			WriteHalf(addr, data & 0xFFFF);
-			WriteHalf(addr + 2, data >> 16 & 0xFFFF);
-		}
-	}
-
-
-	template<std::integral Int>
-	void WriteVram(u32 addr, Int data)
-	{
-		std::memcpy(vram.data() + (addr % 0x18000), &data, sizeof(Int));
-		//if (dispcnt.forced_blank || in_vblank || in_hblank) {
-		//	std::memcpy(vram.data() + (addr % 0x18000), &data, sizeof(Int));
-		//}
-	}
-
-
-	template u8 ReadOam<u8>(u32);
-	template s8 ReadOam<s8>(u32);
-	template u16 ReadOam<u16>(u32);
-	template s16 ReadOam<s16>(u32);
-	template u32 ReadOam<u32>(u32);
-	template s32 ReadOam<s32>(u32);
-	template void WriteOam<u8>(u32, u8);
-	template void WriteOam<s8>(u32, s8);
-	template void WriteOam<u16>(u32, u16);
-	template void WriteOam<s16>(u32, s16);
-	template void WriteOam<u32>(u32, u32);
-	template void WriteOam<s32>(u32, s32);
-
-	template u8 ReadPaletteRam<u8>(u32);
-	template s8 ReadPaletteRam<s8>(u32);
-	template u16 ReadPaletteRam<u16>(u32);
-	template s16 ReadPaletteRam<s16>(u32);
-	template u32 ReadPaletteRam<u32>(u32);
-	template s32 ReadPaletteRam<s32>(u32);
-	template void WritePaletteRam<u8>(u32, u8);
-	template void WritePaletteRam<s8>(u32, s8);
-	template void WritePaletteRam<u16>(u32, u16);
-	template void WritePaletteRam<s16>(u32, s16);
-	template void WritePaletteRam<u32>(u32, u32);
-	template void WritePaletteRam<s32>(u32, s32);
-
-	template u8 ReadReg<u8>(u32);
-	template s8 ReadReg<s8>(u32);
-	template u16 ReadReg<u16>(u32);
-	template s16 ReadReg<s16>(u32);
-	template u32 ReadReg<u32>(u32);
-	template s32 ReadReg<s32>(u32);
-	template void WriteReg<u8>(u32, u8);
-	template void WriteReg<s8>(u32, s8);
-	template void WriteReg<u16>(u32, u16);
-	template void WriteReg<s16>(u32, s16);
-	template void WriteReg<u32>(u32, u32);
-	template void WriteReg<s32>(u32, s32);
-
-	template u8 ReadVram<u8>(u32);
-	template s8 ReadVram<s8>(u32);
-	template u16 ReadVram<u16>(u32);
-	template s16 ReadVram<s16>(u32);
-	template u32 ReadVram<u32>(u32);
-	template s32 ReadVram<s32>(u32);
-	template void WriteVram<u8>(u32, u8);
-	template void WriteVram<s8>(u32, s8);
-	template void WriteVram<u16>(u32, u16);
-	template void WriteVram<s16>(u32, s16);
-	template void WriteVram<u32>(u32, u32);
-	template void WriteVram<s32>(u32, s32);
 }
