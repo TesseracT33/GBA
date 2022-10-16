@@ -106,6 +106,10 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <AdditionalIncludeDirectories>C:\SDKs\SDL2-2.0.22\include;C:\SDKs\SDL2_mixer-2.6.2\include;C:\SDKs\imgui-1.88\backends;C:\SDKs\imgui-1.88</AdditionalIncludeDirectories>
+      <ModuleDependenciesFile>$(IntDir)%(RelativeDir)</ModuleDependenciesFile>
+      <SourceDependenciesFile>$(IntDir)%(RelativeDir)</SourceDependenciesFile>
+      <ModuleOutputFile>$(IntDir)%(RelativeDir)</ModuleOutputFile>
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -124,6 +128,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <AdditionalIncludeDirectories>C:\SDKs\SDL2-2.0.22\include;C:\SDKs\SDL2_mixer-2.6.2\include;C:\SDKs\imgui-1.88\backends;C:\SDKs\imgui-1.88</AdditionalIncludeDirectories>
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -174,8 +179,9 @@
     <ClCompile Include="external\Humla\src\UserMessage.ixx" />
     <ClCompile Include="external\Humla\src\Video.cpp" />
     <ClCompile Include="external\Humla\src\Video.ixx" />
-    <ClCompile Include="src\APU.cpp" />
-    <ClCompile Include="src\APU.ixx" />
+    <ClCompile Include="src\apu\APU.cpp" />
+    <ClCompile Include="src\apu\APU.ixx" />
+    <ClCompile Include="src\apu\Interface.cpp" />
     <ClCompile Include="src\Bios.cpp" />
     <ClCompile Include="src\Bios.ixx" />
     <ClCompile Include="src\Bus.cpp" />

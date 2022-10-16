@@ -116,10 +116,10 @@
     <ClCompile Include="src\IRQ.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\APU.cpp">
+    <ClCompile Include="src\apu\APU.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\APU.ixx">
+    <ClCompile Include="src\apu\APU.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Scheduler.ixx">
@@ -213,6 +213,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\ppu\Rendering.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\apu\Interface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
