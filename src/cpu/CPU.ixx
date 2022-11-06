@@ -131,15 +131,13 @@ namespace CPU
 		"EQ", "NE", "CS", "CC", "MI", "PL", "VS", "VC", "HI", "LS", "GE", "LT", "GT", "LE", "AL", "INVALID"
 	};
 
-	struct Pipeline
-	{
+	struct Pipeline {
 		std::array<u32, 2> opcode;
 		uint index;
 		uint step;
 	} pipeline;
 
-	struct CPSR
-	{
+	struct CPSR {
 		u32 mode : 5; /* 16=User, 17=FIQ, 18=IRQ, 19=Supervisor, 23=Abort, 27=Undefined, 31=System */
 		u32 state : 1; /* 0=ARM, 1=THUMB */
 		u32 fiq_disable : 1;

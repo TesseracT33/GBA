@@ -48,8 +48,7 @@ namespace DMA
 		u32 src_addr;
 		u32 src_addr_incr;
 		u64 cycle;
-		struct Control
-		{
+		struct Control {
 			u16 : 5;
 			u16 dst_addr_ctrl : 2;
 			u16 src_addr_ctrl : 2;

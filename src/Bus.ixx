@@ -154,8 +154,7 @@ namespace Bus
 	constexpr std::array<std::array<u8, 2>, 3> cart_wait_2nd_access = {{ {3, 2}, {5, 2}, {9, 2} }}; /* wait state * waitcnt setting */
 	constexpr std::array sram_wait = {5, 4, 3, 9};
 
-	struct WAITCNT
-	{
+	struct WAITCNT {
 		bool game_pak_type_flag;
 		bool prefetch_buffer_enable;
 		u8 cart_wait[3][2]; /* wait state * sequential access */

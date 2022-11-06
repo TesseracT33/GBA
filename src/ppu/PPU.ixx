@@ -29,13 +29,11 @@ namespace PPU
 		template<std::integral Int> void WriteVram(u32 addr, Int data);
 	}
 
-	struct RGB
-	{
+	struct RGB {
 		u8 r, g, b;
 	};
 
-	struct BgColorData
-	{
+	struct BgColorData {
 		u16 r : 5;
 		u16 g : 5;
 		u16 b : 5;
@@ -43,8 +41,7 @@ namespace PPU
 		RGB ToRGB() const { return { u8(r), u8(g), u8(b) }; }
 	};
 
-	struct ObjColorData
-	{
+	struct ObjColorData {
 		u32 r : 5;
 		u32 g : 5;
 		u32 b : 5;
@@ -55,8 +52,7 @@ namespace PPU
 		RGB ToRGB() const { return { u8(r), u8(g), u8(b) }; }
 	};
 
-	struct ObjData
-	{
+	struct ObjData {
 		u16 y_coord : 8;
 		u16 rotate_scale : 1;
 		u16 double_size_obj_disable : 1;
@@ -119,14 +115,14 @@ namespace PPU
 	constexpr uint framebuffer_height = 160;
 	constexpr uint framebuffer_pitch = dots_per_line * 3;
 	constexpr uint framebuffer_width = 240;
+	constexpr uint framebuffer_size = framebuffer_height * framebuffer_width * 3;
 	constexpr uint lines_until_vblank = 160;
 	constexpr uint max_objects = 128;
 	constexpr uint total_num_lines = 228;
 	constexpr BgColorData transparent_bg_pixel = { .r = 0, .g = 0, .b = 0, .transparent = true };
 	constexpr ObjColorData transparent_obj_pixel = { .r = 0, .g = 0, .b = 0, .transparent = true, .obj_mode = 0 };
 
-	struct DISPCNT
-	{
+	struct DISPCNT {
 		u16 bg_mode : 3; /* 0-5=Video Mode 0-5, 6-7=Prohibited */
 		u16 cgb_mode : 1; /* 0=GBA, 1=CGB; can be set only by BIOS opcodes */
 		u16 display_frame_select : 1; /* 0-1=Frame 0-1 (for BG Modes 4,5 only) */
@@ -142,8 +138,7 @@ namespace PPU
 
 	bool green_swap;
 
-	struct DISPSTAT
-	{
+	struct DISPSTAT {
 		u16 vblank : 1;
 		u16 hblank : 1;
 		u16 v_counter_match : 1;
@@ -156,8 +151,7 @@ namespace PPU
 
 	u8 v_counter;
 
-	struct BGCNT
-	{
+	struct BGCNT {
 		u16 bg_priority : 2; /* 0-3, 0=Highest */
 		u16 char_base_block : 2; /* 0-3, in units of 16 KBytes (=BG Tile Data) */
 		u16 : 2;
@@ -172,8 +166,7 @@ namespace PPU
 	std::array<u16, 4> bghofs;
 	std::array<u16, 4> bgvofs;
 
-	struct BGP
-	{
+	struct BGP {
 		u16 fractional : 8;
 		u16 integer : 7;
 		u16 sign : 1;
@@ -181,8 +174,7 @@ namespace PPU
 
 	std::array<BGP, 2> bgpa, bgpb, bgpc, bgpd;
 
-	struct BGXY
-	{
+	struct BGXY {
 		u32 fractional : 8;
 		u32 integer : 19;
 		u32 sign : 1;
@@ -191,8 +183,7 @@ namespace PPU
 
 	std::array<BGXY, 2> bgx, bgy;
 
-	struct WININ
-	{
+	struct WININ {
 		u16 window0_bg_enable : 4;
 		u16 window0_obj_enable : 1;
 		u16 window0_color_special_effect : 1;
@@ -203,8 +194,7 @@ namespace PPU
 		u16 : 2;
 	} winin;
 
-	struct WINOUT
-	{
+	struct WINOUT {
 		u16 outside_bg_enable : 4;
 		u16 outside_obj_enable : 1;
 		u16 outside_color_special_effect : 1;
@@ -215,16 +205,14 @@ namespace PPU
 		u16 : 2;
 	} winout;
 
-	struct MOSAIC
-	{
+	struct MOSAIC {
 		u16 bg_h_size : 4;
 		u16 bg_v_size : 4;
 		u16 obj_h_size : 4;
 		u16 obj_v_size : 4;
 	} mosaic;
 
-	struct BLDCNT
-	{
+	struct BLDCNT {
 		u16 bg_1st_target_pixel : 4;
 		u16 obj_1st_target_pixel : 1;
 		u16 bd_1st_target_pixel : 1;

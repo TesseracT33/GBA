@@ -40,15 +40,13 @@ namespace Scheduler
 
 	uint GetDriverPriority(DriverType type);
 
-	struct Driver
-	{
+	struct Driver {
 		DriverType type;
 		DriverRunFunc run_function;
 		DriverSuspendFunc suspend_function;
 	};
 
-	struct Event
-	{
+	struct Event {
 		EventCallback callback;
 		u64 time;
 		EventType type;

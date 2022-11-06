@@ -39,8 +39,7 @@ namespace Timers
 		void WriteControl(u8 data);
 		void WriteReload(u8 value, u8 byte_index);
 		void WriteReload(u16 value);
-		struct Control
-		{
+		struct Control {
 			u8 prescaler : 2;
 			u8 count_up : 1;
 			u8 : 3;
