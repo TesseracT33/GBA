@@ -2,8 +2,8 @@ export module Scheduler;
 
 import Util;
 
-import <list>;
 import <utility>;
+import <vector>;
 
 namespace Scheduler
 {
@@ -54,6 +54,6 @@ namespace Scheduler
 
 	u64 global_time;
 
-	std::list<Driver> drivers; /* orderer by priority */
-	std::list<Event> events; /* ordered by timestamp */
+	std::vector<Driver> drivers; /* orderer by priority */
+	std::vector<Event> events; /* ordered by timestamp */
 }

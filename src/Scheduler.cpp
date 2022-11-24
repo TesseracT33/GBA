@@ -109,7 +109,7 @@ namespace Scheduler
 				global_time += drivers.front().run_function(events.front().time - global_time);
 			}
 			Event top_event = events.front();
-			events.pop_front();
+			events.erase(events.begin());
 			global_time = top_event.time; /* just in case we ran for longer than we should have */
 			top_event.callback();
 		}
